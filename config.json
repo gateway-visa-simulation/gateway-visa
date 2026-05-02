@@ -1,0 +1,16 @@
+{
+  "database": {
+    "connection_string": "host=172.17.240.1 port=5432 dbname=postgres user=postgres password=admin"
+  },
+  "cache": {
+    "refresh_interval_sec": 30
+  },
+  "kafka": {
+    "brokers": "localhost:9092",
+    "request_topic": "visa.auth.request",
+    "response_topic": "visa.auth.response"
+  },
+  "server": {
+    "port": 8889
+  }
+}
