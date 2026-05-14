@@ -4,15 +4,18 @@
 #include <optional>
 #include "../iso8583/iso_message.h"
 
+
+using namespace std;
+
 class SoftHsm {
 public:
     static SoftHsm& get_instance();
 
     // Valida o MAC de uma mensagem ISO 8583 usando o algoritmo Retail MAC.
-    bool validate_retail_mac(const IsoMessage& msg, const std::string& mak_hex);
+    bool validate_retail_mac(const IsoMessage& msg, const string& mak_hex);
 
     // Decifra um PIN Block (formato ISO-0) e retorna o PIN em texto plano.
-    std::optional<std::string> decrypt_pin_block_iso0(const std::string& pin_block_hex, const std::string& pan, const std::string& zpk_hex);
+    optional<string> decrypt_pin_block_iso0(const string& pin_block_hex, const string& pan, const string& zpk_hex);
 
 private:
     SoftHsm() = default;
@@ -21,9 +24,9 @@ private:
     SoftHsm& operator=(const SoftHsm&) = delete;
 
     // Helpers
-    std::vector<uint8_t> hex_to_bytes(const std::string& hex);
-    std::string bytes_to_hex(const std::vector<uint8_t>& bytes);
-    std::vector<uint8_t> build_mac_data_block(const IsoMessage& msg);
-    std::vector<uint8_t> des_encrypt_cbc(const std::vector<uint8_t>& key, const std::vector<uint8_t>& data);
-    std::vector<uint8_t> tdes_decrypt_ecb(const std::vector<uint8_t>& key, const std::vector<uint8_t>& data);
+    vector<uint8_t> hex_to_bytes(const string& hex);
+    string bytes_to_hex(const vector<uint8_t>& bytes);
+    vector<uint8_t> build_mac_data_block(const IsoMessage& msg);
+    vector<uint8_t> des_encrypt_cbc(const vector<uint8_t>& key, const vector<uint8_t>& data);
+    vector<uint8_t> tdes_decrypt_ecb(const vector<uint8_t>& key, const vector<uint8_t>& data);
 };

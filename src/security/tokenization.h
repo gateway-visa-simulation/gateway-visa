@@ -3,6 +3,8 @@
 #include <map>
 #include <mutex>
 
+using namespace std;
+
 class Tokenizer {
 public:
     static Tokenizer& getInstance();
@@ -11,31 +13,31 @@ public:
      * @brief Mascara um PAN para logs e exibicao
      *
      * @param pan "1234567890123456"
-     * @return std::string "123456******3456"
+     * @return string "123456******3456"
      */
-    std::string maskPan(const std::string& pan);
+    string maskPan(const string& pan);
 
     /**
      * @brief Gera um token (vault) e guarda o mapping para o PAN real.
      *
      * @param pan PAN real
-     * @return std::string Token gerado em formato seguro
+     * @return string Token gerado em formato seguro
      */
-    std::string tokenize(const std::string& pan);
+    string tokenize(const string& pan);
 
     /**
      * @brief Devolve o PAN original de um token em memoria.
      *
      * @param token
-     * @return std::string O PAN se encontrado, string vazia se invalido.
+     * @return string O PAN se encontrado, string vazia se invalido.
      */
-    std::string detokenize(const std::string& token);
+    string detokenize(const string& token);
 
 private:
     Tokenizer() = default;
 
-    std::map<std::string, std::string> vault_;   // token -> pan
-    std::map<std::string, std::string> reverse_; // pan -> token
-    std::mutex mtx_;
+    map<string, string> vault_;   // token -> pan
+    map<string, string> reverse_; // pan -> token
+    mutex mtx_;
     uint64_t counter_ = 1000000;
 };

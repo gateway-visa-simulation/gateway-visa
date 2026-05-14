@@ -2,6 +2,9 @@
 #include <nlohmann/json.hpp>
 #include "../iso8583/iso_message.h"
 
+
+using namespace std;
+
 using json = nlohmann::json;
 
 class JsonToIsoMapper {
@@ -19,5 +22,5 @@ public:
     static IsoMessage mapJsonToIso(const json& response, const IsoMessage& originalRequest = IsoMessage());
 
 private:
-    static std::string formatAmount(int amount);
+    static string formatAmount(int amount);
 };

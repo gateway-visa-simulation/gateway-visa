@@ -4,6 +4,8 @@
 #include <fstream>
 #include <stdexcept>
 
+using namespace std;
+
 class ConfigLoader {
 public:
     static ConfigLoader& getInstance() {
@@ -11,16 +13,16 @@ public:
         return instance;
     }
 
-    void load(const std::string& filepath) {
-        std::ifstream file(filepath);
+    void load(const string& filepath) {
+        ifstream file(filepath);
         if (!file.is_open()) {
-            throw std::runtime_error("Could not open config file: " + filepath);
+            throw runtime_error("Could not open config file: " + filepath);
         }
         file >> config_;
     }
 
-    std::string getDatabaseConnectionString() const {
-        return config_["database"]["connection_string"].get<std::string>();
+    string getDatabaseConnectionString() const {
+        return config_["database"]["connection_string"].get<string>();
     }
 
 private:

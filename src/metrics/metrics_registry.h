@@ -4,18 +4,21 @@
 #include <mutex>
 #include <string>
 
+
+using namespace std;
+
 class MetricsRegistry {
 public:
     static MetricsRegistry& get();
     void record_transaction();
     void record_latency(double ms);
-    void record_response_code(const std::string& code);
+    void record_response_code(const string& code);
     void print_metrics();
 
 private:
     MetricsRegistry() = default;
-    std::atomic<uint64_t> total_tx_{0};
-    std::atomic<double> total_latency_{0.0};
-    std::map<std::string, uint64_t> response_codes_;
-    std::mutex mtx_;
+    atomic<uint64_t> total_tx_{0};
+    atomic<double> total_latency_{0.0};
+    map<string, uint64_t> response_codes_;
+    mutex mtx_;
 };

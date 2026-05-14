@@ -1,6 +1,6 @@
 {
   "database": {
-    "connection_string": "host=172.17.240.1 port=5432 dbname=postgres user=postgres password=admin"
+    "connection_string": "host=172.17.240.1 port=5432 dbname=visanet-db user=postgres password=admin"
   },
   "cache": {
     "refresh_interval_sec": 30
@@ -12,5 +12,9 @@
   },
   "server": {
     "port": 8889
+  },
+
+  "development": {
+    "enable_network_bypass": false
   }
 }

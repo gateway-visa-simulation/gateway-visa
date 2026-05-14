@@ -1,170 +1,199 @@
 #include "iso_parser.h"
-#include "bitmap.h"
-#include "field.h"
-#include "../common/logger.h"
-#include <iomanip>
-#include <sstream>
 #include <stdexcept>
+#include <iostream>
+#include <iomanip>
+#include <algorithm>
+#include <vector>
 
-std::string IsoParser::bcd_to_string(const std::vector<uint8_t>& data, size_t len, bool pad_left) {
-    std::string res;
-    for (uint8_t byte : data) {
-        res += std::to_string((byte >> 4) & 0x0F);
-        res += std::to_string(byte & 0x0F);
+// Dicionário de campos estático
+static map<int, FieldDef> field_defs;
+
+// Funções auxiliares de conversão BCD
+static string bcd_to_string_local(const vector<uint8_t>& bcd_data) {
+    stringstream ss;
+    for (uint8_t byte : bcd_data) {
+        ss << hex << (byte >> 4) << (byte & 0x0F);
     }
-    if (res.length() > len) {
-        if (pad_left) {
-            res = res.substr(res.length() - len);
-        } else {
-            res = res.substr(0, len);
-        }
-    }
-    return res;
+    return ss.str();
 }
 
-std::vector<uint8_t> IsoParser::string_to_bcd(const std::string& str, size_t len, bool pad_left) {
-    std::string s = str;
-    if (s.length() < len) {
-        s = pad_left ? std::string(len - s.length(), '0') + s : s + std::string(len - s.length(), '0');
-    }
+static vector<uint8_t> string_to_bcd_local(const string& str) {
+    vector<uint8_t> bcd;
+    string s = str;
     if (s.length() % 2 != 0) {
-        s = pad_left ? "0" + s : s + "0";
+        s = "0" + s;
     }
-    std::vector<uint8_t> bytes;
     for (size_t i = 0; i < s.length(); i += 2) {
-        uint8_t high = s[i] - '0';
-        uint8_t low = s[i+1] - '0';
-        bytes.push_back((high << 4) | low);
+        uint8_t byte = ((s[i] - '0') << 4) | (s[i+1] - '0');
+        bcd.push_back(byte);
     }
-    return bytes;
+    return bcd;
 }
 
-IsoMessage IsoParser::parse(const std::vector<uint8_t>& data) {
+
+static void initialize_field_defs() {
+    if (!field_defs.empty()) return;
+    field_defs[1] = {1, 16, FieldFormat::FIXED, FieldEncoding::BINARY};
+    field_defs[2] = {2, 19, FieldFormat::LLVAR, FieldEncoding::BCD};
+    field_defs[3] = {3, 6, FieldFormat::FIXED, FieldEncoding::BCD};
+    field_defs[4] = {4, 12, FieldFormat::FIXED, FieldEncoding::BCD};
+    field_defs[7] = {7, 10, FieldFormat::FIXED, FieldEncoding::BCD};
+    field_defs[11] = {11, 6, FieldFormat::FIXED, FieldEncoding::BCD};
+    field_defs[12] = {12, 6, FieldFormat::FIXED, FieldEncoding::BCD};
+    field_defs[13] = {13, 4, FieldFormat::FIXED, FieldEncoding::BCD};
+    field_defs[14] = {14, 4, FieldFormat::FIXED, FieldEncoding::BCD};
+    field_defs[22] = {22, 3, FieldFormat::FIXED, FieldEncoding::BCD};
+    field_defs[24] = {24, 3, FieldFormat::FIXED, FieldEncoding::BCD};
+    field_defs[25] = {25, 2, FieldFormat::FIXED, FieldEncoding::BCD};
+    field_defs[32] = {32, 11, FieldFormat::LLVAR, FieldEncoding::BCD};
+    field_defs[35] = {35, 37, FieldFormat::LLVAR, FieldEncoding::BCD};
+    field_defs[37] = {37, 12, FieldFormat::FIXED, FieldEncoding::ASCII};
+    field_defs[38] = {38, 6, FieldFormat::FIXED, FieldEncoding::ASCII};
+    field_defs[39] = {39, 2, FieldFormat::FIXED, FieldEncoding::ASCII};
+    field_defs[41] = {41, 8, FieldFormat::FIXED, FieldEncoding::ASCII};
+    field_defs[42] = {42, 15, FieldFormat::FIXED, FieldEncoding::ASCII};
+    field_defs[49] = {49, 3, FieldFormat::FIXED, FieldEncoding::ASCII};
+    field_defs[52] = {52, 8, FieldFormat::FIXED, FieldEncoding::BINARY};
+    field_defs[55] = {55, 999, FieldFormat::LLLVAR, FieldEncoding::BINARY};
+    field_defs[62] = {62, 999, FieldFormat::LLLVAR, FieldEncoding::ASCII};
+    field_defs[63] = {63, 999, FieldFormat::LLLVAR, FieldEncoding::ASCII};
+    field_defs[64] = {64, 8, FieldFormat::FIXED, FieldEncoding::BINARY};
+    field_defs[70] = {70, 3, FieldFormat::FIXED, FieldEncoding::ASCII};
+    field_defs[128] = {128, 8, FieldFormat::FIXED, FieldEncoding::BINARY};
+}
+
+IsoMessage IsoParser::parse(const vector<uint8_t>& data) {
+    initialize_field_defs();
     IsoMessage msg;
-    if (data.size() < 10) {
-        throw std::runtime_error("Message too short to parse even MTI/Bitmap");
+    size_t offset = 0;
+
+    // MTI
+    msg.mti = bcd_to_string_local({data[0], data[1]});
+    offset += 2;
+
+    // Bitmap
+    vector<bool> bitmap(128, false);
+    int fields_to_process = 64;
+    if ((data[offset] & 0x80) != 0) {
+        fields_to_process = 128;
     }
 
-    std::vector<uint8_t> mti_bytes(data.begin(), data.begin() + 2);
-    msg.mti = bcd_to_string(mti_bytes, 4);
-
-    std::vector<uint8_t> bitmap_bytes(data.begin() + 2, data.begin() + 10);
-    Bitmap bmp = Bitmap::from_bytes(bitmap_bytes);
-
-    size_t offset = 10;
-
-    if (bmp.is_set(1)) {
-        if (data.size() < 18) {
-            throw std::runtime_error("Message too short for secondary bitmap");
+    for (int byte_idx = 0; byte_idx < (fields_to_process / 8); ++byte_idx) {
+        for (int bit_idx = 0; bit_idx < 8; ++bit_idx) {
+            if ((data[offset + byte_idx] >> (7 - bit_idx)) & 1) {
+                bitmap[byte_idx * 8 + bit_idx] = true;
+            }
         }
-        std::vector<uint8_t> extended_bitmap_bytes(data.begin() + 2, data.begin() + 18);
-        bmp = Bitmap::from_bytes(extended_bitmap_bytes);
-        offset = 18;
     }
+    offset += (fields_to_process / 8);
 
-    const auto& defs = IsoFieldDef::get_definitions();
+    // Data Elements
+    for (int i = 1; i < fields_to_process; ++i) {
+        if (bitmap[i]) {
+            int field_id = i + 1;
+            if (field_defs.find(field_id) == field_defs.end()) continue;
 
-    for (int i = 2; i <= 128; ++i) {
-        if (bmp.is_set(i)) {
-            if (defs.find(i) == defs.end()) {
-                LOG_WARN("Skipando parsing do campo nao suportado/desconhecido: DE{}", i);
-                continue;
-            }
+            FieldDef def = field_defs.at(field_id);
+            int len = 0;
 
-            const auto& def = defs.at(i);
-            size_t logical_len = def.max_length;
-
-            if (def.format == FieldFormat::LLVAR) {
-                if (offset >= data.size()) throw std::runtime_error("Truncated LLVAR prefix at DE" + std::to_string(i));
-                logical_len = std::stoi(bcd_to_string({data[offset]}, 2));
-                offset += 1;
-            } else if (def.format == FieldFormat::LLLVAR) {
-                if (offset + 1 >= data.size()) throw std::runtime_error("Truncated LLLVAR prefix at DE" + std::to_string(i));
-                logical_len = std::stoi(bcd_to_string({data[offset], data[offset+1]}, 4));
-                offset += 2;
-            }
-
-            size_t bytes_len = 0;
-            switch(def.encoding) {
-                case FieldEncoding::BCD:
-                    bytes_len = (logical_len + 1) / 2;
+            switch (def.format) {
+                case FieldFormat::FIXED:
+                    len = def.max_length;
                     break;
-                case FieldEncoding::ASCII:
-                case FieldEncoding::BINARY:
-                    bytes_len = logical_len;
+                case FieldFormat::LLVAR:
+                    len = stoi(bcd_to_string_local({data[offset]}));
+                    offset += 1;
+                    break;
+                case FieldFormat::LLLVAR:
+                    len = stoi(bcd_to_string_local({data[offset], data[offset+1]}));
+                    offset += 2;
                     break;
             }
 
-            if (offset + bytes_len > data.size()) {
-                throw std::runtime_error("Message truncated parsing data for DE" + std::to_string(i));
+            int bytes_to_read = (def.encoding == FieldEncoding::BCD) ? (len + 1) / 2 : len;
+            if (offset + bytes_to_read > data.size()) {
+                throw runtime_error("Buffer overflow while parsing field " + to_string(field_id));
             }
 
-            std::vector<uint8_t> field_data(data.begin() + offset, data.begin() + offset + bytes_len);
+            vector<uint8_t> field_data(data.begin() + offset, data.begin() + offset + bytes_to_read);
 
             if (def.encoding == FieldEncoding::BCD) {
-                msg.set_field(i, bcd_to_string(field_data, logical_len, def.format != FieldFormat::FIXED && logical_len % 2 != 0));
-            } else if (def.encoding == FieldEncoding::ASCII) {
-                msg.set_field(i, std::string(field_data.begin(), field_data.end()));
-            } else if (def.encoding == FieldEncoding::BINARY) {
-                std::stringstream ss;
-                for(auto b: field_data) ss << std::hex << std::setw(2) << std::setfill('0') << (int)b;
-                msg.set_field(i, ss.str());
+                msg.set_field(field_id, bcd_to_string_local(field_data).substr(0, len));
+            } else { // ASCII or BINARY
+                msg.set_field(field_id, string(field_data.begin(), field_data.end()));
             }
-
-            offset += bytes_len;
+            offset += bytes_to_read;
         }
     }
     return msg;
 }
 
-std::vector<uint8_t> IsoParser::build(const IsoMessage& msg) {
-    std::vector<uint8_t> result;
+vector<uint8_t> IsoParser::build(const IsoMessage& msg) {
+    initialize_field_defs();
+    vector<uint8_t> data;
 
-    auto mti_bcd = string_to_bcd(msg.mti, 4);
-    result.insert(result.end(), mti_bcd.begin(), mti_bcd.end());
+    // MTI
+    auto mti_bcd = string_to_bcd_local(msg.mti);
+    data.insert(data.end(), mti_bcd.begin(), mti_bcd.end());
 
-    Bitmap bmp;
-    for (const auto& [field, _] : msg.fields) {
-        bmp.set(field);
+    // Bitmap
+    vector<bool> bitmap(128, false);
+    bool has_secondary = false;
+    for (const auto& pair : msg.fields) {
+        if (pair.first > 1 && pair.first <= 128 && !pair.second.empty()) { // CORREÇÃO APLICADA
+            bitmap[pair.first - 1] = true;
+            if (pair.first > 64) has_secondary = true;
+        }
     }
+    if (has_secondary) bitmap[0] = true;
 
-    auto bmp_bytes = bmp.to_bytes();
-    result.insert(result.end(), bmp_bytes.begin(), bmp_bytes.end());
+    int bitmap_size = has_secondary ? 16 : 8;
+    vector<uint8_t> bitmap_data(bitmap_size, 0);
+    for (int i = 0; i < bitmap_size * 8; ++i) {
+        if (bitmap[i]) {
+            bitmap_data[i / 8] |= (1 << (7 - (i % 8)));
+        }
+    }
+    data.insert(data.end(), bitmap_data.begin(), bitmap_data.end());
 
-    const auto& defs = IsoFieldDef::get_definitions();
+    // Data Elements
+    for (int i = 1; i < (has_secondary ? 128 : 64); ++i) {
+        if (bitmap[i]) {
+            int field_id = i + 1;
+            if (msg.fields.find(field_id) == msg.fields.end()) continue;
 
-    for (int i = 2; i <= 128; ++i) {
-        if (msg.has_field(i)) {
-            if (defs.find(i) == defs.end()) {
-                LOG_ERROR("Nao e possivel serializar campo {} - sem definicao de formatação.", i);
-                continue;
-            }
+            const auto& val = msg.fields.at(field_id);
+            const auto& def = field_defs.at(field_id);
 
-            const auto& def = defs.at(i);
-            std::string val = msg.get_field(i);
-            size_t logical_len = val.length();
-
-            if (def.format == FieldFormat::LLVAR) {
-                auto len_bcd = string_to_bcd(std::to_string(logical_len), 2, true);
-                result.insert(result.end(), len_bcd.begin(), len_bcd.end());
-            } else if (def.format == FieldFormat::LLLVAR) {
-                auto len_bcd = string_to_bcd(std::to_string(logical_len), 4, true);
-                result.insert(result.end(), len_bcd.begin(), len_bcd.end());
+            switch (def.format) {
+                case FieldFormat::LLVAR:
+                    data.push_back(string_to_bcd_local(to_string(val.length()))[0]);
+                    break;
+                case FieldFormat::LLLVAR: {
+                    auto len_bcd = string_to_bcd_local(to_string(val.length()));
+                    data.insert(data.end(), len_bcd.begin(), len_bcd.end());
+                    break;
+                }
+                default: break;
             }
 
             if (def.encoding == FieldEncoding::BCD) {
-                auto val_bcd = string_to_bcd(val, logical_len, def.format != FieldFormat::FIXED && logical_len % 2 != 0);
-                result.insert(result.end(), val_bcd.begin(), val_bcd.end());
-            } else if (def.encoding == FieldEncoding::ASCII) {
-                result.insert(result.end(), val.begin(), val.end());
-            } else if (def.encoding == FieldEncoding::BINARY) {
-                for (size_t k = 0; k < val.length(); k += 2) {
-                    std::string byteStr = val.substr(k, 2);
-                    uint8_t byte = (uint8_t)strtol(byteStr.c_str(), NULL, 16);
-                    result.push_back(byte);
-                }
+                auto field_data = string_to_bcd_local(val);
+                data.insert(data.end(), field_data.begin(), field_data.end());
+            } else { // ASCII or BINARY
+                data.insert(data.end(), val.begin(), val.end());
             }
         }
     }
-    return result;
+    return data;
+}
+
+// Implementação das funções públicas para manter a compatibilidade do header
+string IsoParser::bcd_to_string(const vector<uint8_t>& data, size_t len, bool pad_left) {
+    string s = bcd_to_string_local(data);
+    return s.substr(0, len);
+}
+
+vector<uint8_t> IsoParser::string_to_bcd(const string& str, size_t len, bool pad_left) {
+    return string_to_bcd_local(str);
 }

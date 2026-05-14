@@ -7,18 +7,19 @@
 #include <functional>
 #include <atomic>
 
+using namespace std;
+
 class ThreadPool {
 public:
     ThreadPool(size_t num_threads) : stop_(false) {
         for (size_t i = 0; i < num_threads; ++i) {
             workers_.emplace_back([this] {
                 while (true) {
-                    std::function<void()> task;
-                    {
-                        std::unique_lock<std::mutex> lock(queue_mutex_);
+                    function<void()> task; {
+                        unique_lock<mutex> lock(queue_mutex_);
                         condition_.wait(lock, [this] { return stop_ || !tasks_.empty(); });
                         if (stop_ && tasks_.empty()) return;
-                        task = std::move(tasks_.front());
+                        task = move(tasks_.front());
                         tasks_.pop();
                     }
                     task();
@@ -27,30 +28,28 @@ public:
         }
     }
 
-    ~ThreadPool() {
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
+    ~ThreadPool() { {
+            unique_lock<mutex> lock(queue_mutex_);
             stop_ = true;
         }
         condition_.notify_all();
-        for (std::thread &worker : workers_) {
+        for (thread &worker: workers_) {
             worker.join();
         }
     }
 
     template<class F>
-    void enqueue(F&& f) {
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            tasks_.emplace(std::forward<F>(f));
+    void enqueue(F &&f) { {
+            unique_lock<mutex> lock(queue_mutex_);
+            tasks_.emplace(forward<F>(f));
         }
         condition_.notify_one();
     }
 
 private:
-    std::vector<std::thread> workers_;
-    std::queue<std::function<void()>> tasks_;
-    std::mutex queue_mutex_;
-    std::condition_variable condition_;
-    std::atomic<bool> stop_;
+    vector<thread> workers_;
+    queue<function<void()> > tasks_;
+    mutex queue_mutex_;
+    condition_variable condition_;
+    atomic<bool> stop_;
 };

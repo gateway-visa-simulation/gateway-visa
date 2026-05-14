@@ -4,6 +4,8 @@
 #include <mutex>
 #include <fstream>
 
+using namespace std;
+
 class TransactionRepository {
 public:
     static TransactionRepository& get();
@@ -12,6 +14,6 @@ public:
 private:
     TransactionRepository();
     ~TransactionRepository();
-    std::mutex mtx_;
-    std::ofstream file_;
+    mutex mtx_;
+    ofstream file_;
 };

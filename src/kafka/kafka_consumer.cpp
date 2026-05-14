@@ -1,17 +1,19 @@
 #include "kafka_consumer.h"
 #include "../common/logger.h"
 
-KafkaConsumer::KafkaConsumer(const std::string& brokers, const std::string& group_id) {
-    std::string errstr;
 
-    std::unique_ptr<RdKafka::Conf> conf(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL));
+
+KafkaConsumer::KafkaConsumer(const string& brokers, const string& group_id) {
+    string errstr;
+
+    unique_ptr<RdKafka::Conf> conf(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL));
 
     if (conf->set("bootstrap.servers", brokers, errstr) != RdKafka::Conf::CONF_OK) {
-        throw std::runtime_error("Kafka Conf failed: " + errstr);
+        throw runtime_error("Kafka Conf failed: " + errstr);
     }
 
     if (conf->set("group.id", group_id, errstr) != RdKafka::Conf::CONF_OK) {
-        throw std::runtime_error("Group ID failed: " + errstr);
+        throw runtime_error("Group ID failed: " + errstr);
     }
 
     if (conf->set("auto.offset.reset", "earliest", errstr) != RdKafka::Conf::CONF_OK) {
@@ -25,7 +27,7 @@ KafkaConsumer::KafkaConsumer(const std::string& brokers, const std::string& grou
     consumer_.reset(RdKafka::KafkaConsumer::create(conf.get(), errstr));
     if (!consumer_) {
         LOG_ERROR("Falha ao criar o consumidor Kafka: {}", errstr);
-        throw std::runtime_error("Consumer create failed: " + errstr);
+        throw runtime_error("Consumer create failed: " + errstr);
     }
 
     LOG_INFO("Consumidor Kafka criado. Brokers: {}, Group: {}", brokers, group_id);
@@ -39,7 +41,7 @@ KafkaConsumer::~KafkaConsumer() {
     }
 }
 
-bool KafkaConsumer::subscribe(const std::vector<std::string>& topics) {
+bool KafkaConsumer::subscribe(const vector<string>& topics) {
     if (!consumer_) return false;
 
     RdKafka::ErrorCode err = consumer_->subscribe(topics);
@@ -62,7 +64,7 @@ void KafkaConsumer::start_consuming(MessageHandler handler) {
     LOG_INFO("Iniciando loop de consumo Kafka...");
 
     while (run_) {
-        std::unique_ptr<RdKafka::Message> msg(consumer_->consume(500));
+        unique_ptr<RdKafka::Message> msg(consumer_->consume(500));
 
         if (msg->err() == RdKafka::ERR__TIMED_OUT) {
             continue;
@@ -72,13 +74,13 @@ void KafkaConsumer::start_consuming(MessageHandler handler) {
             LOG_DEBUG("Lida nova mensagem no tópico {} partition {} offset {}",
                       msg->topic_name(), msg->partition(), msg->offset());
 
-            std::string key(msg->key() ? *msg->key() : "");
-            std::string payload(static_cast<const char*>(msg->payload()), msg->len());
+            string key(msg->key() ? *msg->key() : "");
+            string payload(static_cast<const char*>(msg->payload()), msg->len());
 
             try {
                 handler(key, payload);
                 consumer_->commitSync(msg.get());
-            } catch (const std::exception& e) {
+            } catch (const exception& e) {
                 LOG_ERROR("Erro ao processar mensagem do Kafka (key: {}): {}", key, e.what());
             }
         } else if (msg->err() == RdKafka::ERR__PARTITION_EOF) {
@@ -89,8 +91,8 @@ void KafkaConsumer::start_consuming(MessageHandler handler) {
             continue;
         } else {
             // "Broker: Unknown topic or partition"
-            std::string errStr = msg->errstr();
-            if (errStr.find("Unknown topic") != std::string::npos) {
+            string errStr = msg->errstr();
+            if (errStr.find("Unknown topic") != string::npos) {
                  continue; // Ignora auto-create aguardando o producer
             }
 

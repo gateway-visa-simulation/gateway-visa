@@ -15,13 +15,13 @@ void MetricsRegistry::record_latency(double ms) {
     total_latency_ = total_latency_ + ms;
 }
 
-void MetricsRegistry::record_response_code(const std::string& code) {
-    std::lock_guard<std::mutex> lock(mtx_);
+void MetricsRegistry::record_response_code(const string& code) {
+    lock_guard<mutex> lock(mtx_);
     response_codes_[code]++;
 }
 
 void MetricsRegistry::print_metrics() {
-    std::lock_guard<std::mutex> lock(mtx_);
+    lock_guard<mutex> lock(mtx_);
     nlohmann::json j;
     j["total_transactions"] = total_tx_.load();
     double avg_latency = total_tx_.load() > 0 ? total_latency_.load() / total_tx_.load() : 0.0;

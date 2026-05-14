@@ -11,8 +11,8 @@ IssuerService& IssuerService::get_instance() {
     return instance;
 }
 
-std::string IssuerService::process_transaction(const IsoMessage& req) {
-    std::string pan = req.get_field(2);
+string IssuerService::process_transaction(const IsoMessage& req) {
+    string pan = req.get_field(2);
     if (pan.empty()) {
         LOG_WARN("PAN não fornecido na transação.");
         return "14"; // Invalid card number
@@ -42,22 +42,26 @@ std::string IssuerService::process_transaction(const IsoMessage& req) {
     // Aplicar o simulation_delay específico do cartão, se houver.
     if (card.simulation_delay_ms > 0) {
         LOG_DEBUG("Aplicando delay simulado específico de {}ms para o cartão {}", card.simulation_delay_ms, req.mask_pan());
-        std::this_thread::sleep_for(std::chrono::milliseconds(card.simulation_delay_ms));
+        this_thread::sleep_for(chrono::milliseconds(card.simulation_delay_ms));
     }
 
-    // A validação de PIN e Limites na versão "IssuerLocal" foi simplificada aqui
-    // pois o DatabaseManager lookupCard atual só traz dados parciais.
-    // Em uma versão real, o DatabaseManager buscaria saldo e limites e executaria UPDATE atômico.
-    // Para manter a compatibilidade com a implementação atual de DatabaseManager, vamos apenas aprovar
-    // cartões válidos sem estourar código que falta na interface de database_manager.h atual.
+    // Realizar a atualização do saldo e validar fundos
+    double amount = 0.0;
+    if (req.has_field(4)) {
+        amount = std::stod(req.get_field(4)) / 100.0;
+    }
 
-    // Se passou por todas as regras negativas acima, consideraremos aprovado (Mock simplificado)
+    if (!DatabaseManager::getInstance().updateCardBalance(pan, amount)) {
+        LOG_WARN("Transação negada: Saldo insuficiente ou cartão inativo para o PAN: {}", req.mask_pan());
+        return "51"; // Not sufficient funds
+    }
+
     LOG_INFO("Transação processada localmente e APROVADA para PAN: {}", req.mask_pan());
     return "00"; // Approved
 }
 
-std::string IssuerService::process_reversal(const IsoMessage& req) {
-    std::string pan = req.get_field(2);
+string IssuerService::process_reversal(const IsoMessage& req) {
+    string pan = req.get_field(2);
     if (pan.empty()) return "14";
 
     // Busca o cartão para garantir que existe
@@ -66,8 +70,17 @@ std::string IssuerService::process_reversal(const IsoMessage& req) {
         return "14"; // Invalid card number
     }
 
-    // Em uma implementação real com banco, faríamos um UPDATE para devolver saldo.
-    // Como a interface atual do DatabaseManager simplificada não tem isso, retornamos sucesso mock.
+    double amount = 0.0;
+    if (req.has_field(4)) {
+        amount = std::stod(req.get_field(4)) / 100.0;
+    }
+
+    // Realiza o estorno do saldo
+    if (!DatabaseManager::getInstance().refundCardBalance(pan, amount)) {
+        LOG_WARN("Falha ao processar estorno e devolver saldo para o PAN: {}", req.mask_pan());
+        return "96"; // System Malfunction
+    }
+
     LOG_INFO("Reversal processado localmente e APROVADO para PAN: {}", req.mask_pan());
     return "00";
 }

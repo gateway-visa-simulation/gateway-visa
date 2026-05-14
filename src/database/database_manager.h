@@ -6,19 +6,20 @@
 #include <shared_mutex>
 #include <mutex>
 #include <pqxx/pqxx>
-#include <thread> // Para std::thread
-#include <atomic> // Para std::atomic
-#include <chrono> // Para std::chrono
+#include <thread> // Para thread
+#include <atomic> // Para atomic
+#include <chrono> // Para chrono
 
 #include "db_structures.h" // Inclui as estruturas de dados do arquivo separado
 #include "../iso8583/iso_message.h" // Para logTransaction
 #include "../common/logger.h" // Para LOG_ERROR, LOG_INFO, etc.
 
+using namespace std;
 
 struct BinRouteInfo {
-    std::string bin_prefix;
-    std::string issuer_id;
-    std::string handler_type; // Mapeia para o registro de Handlers no main.cpp
+    string bin_prefix;
+    string issuer_id;
+    string handler_type; // Mapeia para o registro de Handlers no main.cpp
     bool is_online;
 };
 
@@ -30,7 +31,7 @@ public:
     }
 
     // Inicializa a conexão com o banco e carrega o cache inicial
-    void init(const std::string& conninfo);
+    void init(const string& conninfo);
 
     // Fecha a conexão explicitamente
     void close();
@@ -44,24 +45,24 @@ public:
     GlobalConfig getGlobalConfig();
 
     // Busca a rota do BIN (do cache em memória)
-    std::optional<BinRoute> lookupRoute(const std::string& bin); // Agora retorna BinRoute
+    optional<BinRoute> lookupRoute(const string& bin); // Agora retorna BinRoute
 
     // Busca o cartão (Lazy Loading: cache -> banco de dados)
-    std::optional<SimulatedCard> lookupCard(const std::string& pan);
+    optional<SimulatedCard> lookupCard(const string& pan);
 
     // Busca a configuração de um emissor (do cache em memória)
-    std::optional<IssuerConfig> lookupIssuerConfig(const std::string& issuer_id);
+    optional<IssuerConfig> lookupIssuerConfig(const string& issuer_id);
 
     // Busca o resultado de uma transação anterior (Idempotência)
-    std::optional<PreviousTransactionResult> getPreviousTransactionResult(const std::string& unique_key);
+    optional<PreviousTransactionResult> getPreviousTransactionResult(const string& unique_key);
 
     // --- Métodos de Atualização ---
-    bool updateCardBalance(const std::string& pan, double amount);
-    bool refundCardBalance(const std::string& pan, double amount);
+    bool updateCardBalance(const string& pan, double amount);
+    bool refundCardBalance(const string& pan, double amount);
 
     // --- Logging ---
     // Loga a transação usando consultas parametrizadas para evitar SQL Injection
-    void logTransaction(const IsoMessage& msg, const std::string& response_code, const std::string& status, const std::string& issuer_id = "UNKNOWN");
+    void logTransaction(const IsoMessage& msg, const string& response_code, const string& status, const string& issuer_id = "UNKNOWN");
 
     // Recarrega todas as configurações e tabelas de cache
     void refreshCache();
@@ -74,34 +75,34 @@ private:
 
     void connect_if_needed();
 
-    std::unique_ptr<pqxx::connection> conn_;
-    std::string conninfo_;
-    std::atomic<bool> is_initialized_ = false;
-    std::atomic<bool> connected_ = false;
+    unique_ptr<pqxx::connection> conn_;
+    string conninfo_;
+    atomic<bool> is_initialized_ = false;
+    atomic<bool> connected_ = false;
 
     // Mutex global para o banco de dados (protege a conexão e operações críticas)
-    std::mutex db_mutex_;
+    mutex db_mutex_;
 
     // --- Caches e Mutexes Específicos ---
     GlobalConfig global_config_cache_;
-    std::shared_mutex config_cache_mutex_;
+    shared_mutex config_cache_mutex_;
 
-    std::unordered_map<std::string, BinRoute> bin_route_cache_; // Agora armazena BinRoute
-    std::shared_mutex bin_cache_mutex_;
+    unordered_map<string, BinRoute> bin_route_cache_; // Agora armazena BinRoute
+    shared_mutex bin_cache_mutex_;
 
-    std::unordered_map<std::string, SimulatedCard> card_cache_; // Cartões são lazy-loaded
-    std::shared_mutex card_cache_mutex_;
+    unordered_map<string, SimulatedCard> card_cache_; // Cartões são lazy-loaded
+    shared_mutex card_cache_mutex_;
 
-    std::unordered_map<std::string, IssuerConfig> issuer_config_cache_;
-    std::shared_mutex issuer_config_mutex_;
+    unordered_map<string, IssuerConfig> issuer_config_cache_;
+    shared_mutex issuer_config_mutex_;
 
     // Thread de refresh do cache
-    std::atomic<bool> cache_thread_running_ = false;
-    std::thread cache_refresh_thread_;
+    atomic<bool> cache_thread_running_ = false;
+    thread cache_refresh_thread_;
 
     // Métodos privados para carregar dados do DB
     void loadGlobalConfigFromDb();
     void loadAllBinRoutesFromDb();
     void loadAllIssuerConfigsFromDb();
-    std::optional<SimulatedCard> loadSimulatedCardFromDb(const std::string& pan);
+    optional<SimulatedCard> loadSimulatedCardFromDb(const string& pan);
 };

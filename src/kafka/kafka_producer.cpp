@@ -12,14 +12,14 @@ void KafkaProducer::DeliveryReportCb::dr_cb(RdKafka::Message &message) {
     }
 }
 
-KafkaProducer::KafkaProducer(const std::string& brokers) {
-    std::string errstr;
+KafkaProducer::KafkaProducer(const string& brokers) {
+    string errstr;
 
-    std::unique_ptr<RdKafka::Conf> conf(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL));
+    unique_ptr<RdKafka::Conf> conf(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL));
 
     if (conf->set("bootstrap.servers", brokers, errstr) != RdKafka::Conf::CONF_OK) {
         LOG_ERROR("Erro ao configurar brokers Kafka: {}", errstr);
-        throw std::runtime_error("Kafka Conf falhou: " + errstr);
+        throw runtime_error("Kafka Conf falhou: " + errstr);
     }
 
     if (conf->set("acks", "all", errstr) != RdKafka::Conf::CONF_OK) {
@@ -41,7 +41,7 @@ KafkaProducer::KafkaProducer(const std::string& brokers) {
     producer_.reset(RdKafka::Producer::create(conf.get(), errstr));
     if (!producer_) {
         LOG_ERROR("Falha ao criar o produtor Kafka: {}", errstr);
-        throw std::runtime_error("Kafka Producer failed to create: " + errstr);
+        throw runtime_error("Kafka Producer failed to create: " + errstr);
     }
 
     LOG_INFO("Produtor Kafka criado com sucesso. Alvo: {}", brokers);
@@ -60,7 +60,7 @@ KafkaProducer::~KafkaProducer() {
     }
 }
 
-bool KafkaProducer::send(const std::string& topic, const std::string& key, const std::string& payload) {
+bool KafkaProducer::send(const string& topic, const string& key, const string& payload) {
     if (!producer_) return false;
 
     RdKafka::ErrorCode err = producer_->produce(

@@ -1,6 +1,7 @@
 #include "iso_builder.h"
 
-IsoMessage IsoBuilder::build_response(const IsoMessage& request, const std::string& response_code) {
+
+IsoMessage IsoBuilder::build_response(const IsoMessage& request, const string& response_code) {
     IsoMessage response;
 
     // MTI

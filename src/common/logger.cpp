@@ -1,7 +1,7 @@
 #include "logger.h"
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-std::shared_ptr<spdlog::logger> Logger::logger_;
+shared_ptr<spdlog::logger> Logger::logger_;
 
 void Logger::init() {
     logger_ = spdlog::stdout_color_mt("visa_gateway");
@@ -9,6 +9,6 @@ void Logger::init() {
     spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%t] %v");
 }
 
-std::shared_ptr<spdlog::logger> Logger::get() {
+shared_ptr<spdlog::logger> Logger::get() {
     return logger_;
 }

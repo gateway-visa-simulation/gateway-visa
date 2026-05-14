@@ -1,7 +1,9 @@
 #include "field.h"
 
-const std::map<int, FieldDef>& IsoFieldDef::get_definitions() {
-    static const std::map<int, FieldDef> definitions = {
+using namespace std;
+
+const map<int, FieldDef>& IsoFieldDef::get_definitions() {
+    static const map<int, FieldDef> definitions = {
         {2,  {2, 19, FieldFormat::LLVAR, FieldEncoding::BCD}},       // PAN
         {3,  {3, 6, FieldFormat::FIXED, FieldEncoding::BCD}},        // Processing Code
         {4,  {4, 12, FieldFormat::FIXED, FieldEncoding::BCD}},       // Amount
@@ -19,7 +21,7 @@ const std::map<int, FieldDef>& IsoFieldDef::get_definitions() {
     return definitions;
 }
 
-bool IsoFieldDef::is_valid_for_mti(const std::string& mti, int field) {
+bool IsoFieldDef::is_valid_for_mti(const string& mti, int field) {
     if (mti == "0110" && field == 39) return true;
     if (mti == "0100" && field == 39) return false;
     return true;

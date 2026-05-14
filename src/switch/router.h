@@ -7,11 +7,13 @@
 #include <optional>
 #include "../database/db_structures.h" // Inclui as estruturas de dados do DB
 
+using namespace std;
+
 // O handler agora recebe a mensagem e a string de configuração do endpoint (JSON)
-using RouteHandler = std::function<std::string(const IsoMessage&, const std::string& endpoint_config)>;
+using RouteHandler = function<string(const IsoMessage&, const string& endpoint_config)>;
 
 // A lógica de roteamento agora retorna um optional de BinRoute
-using RoutingLogic = std::function<std::optional<BinRoute>(const IsoMessage&)>;
+using RoutingLogic = function<optional<BinRoute>(const IsoMessage&)>;
 
 class Router {
 public:
@@ -21,15 +23,15 @@ public:
     void setRoutingLogic(RoutingLogic logic);
 
     // Registra um handler para um tipo de emissor (ex: "KAFKA_BANK", "LOCAL_BANK")
-    void registerIssuerHandler(const std::string& handler_type, RouteHandler handler);
+    void registerIssuerHandler(const string& handler_type, RouteHandler handler);
 
     // Roteia a mensagem principal consultando o DB e chamando o handler
-    std::string route(const IsoMessage& msg);
+    string route(const IsoMessage& msg);
 
 private:
     Router() = default;
 
     RoutingLogic routing_logic_; // Função para buscar a rota no DB
-    std::map<std::string, RouteHandler> issuer_handlers_; // Mapeia handler_type para a função de processamento
-    std::mutex mtx_;
+    map<string, RouteHandler> issuer_handlers_; // Mapeia handler_type para a função de processamento
+    mutex mtx_;
 };

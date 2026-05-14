@@ -3,14 +3,16 @@
 #include <memory>
 #include <rdkafkacpp.h>
 
+using namespace std;
+
 class KafkaProducer {
 public:
-    KafkaProducer(const std::string& brokers);
+    KafkaProducer(const string& brokers);
     ~KafkaProducer();
 
     // Envia mensagem assincronamente.
     // Retorna false apenas se a fila de envio estiver cheia.
-    bool send(const std::string& topic, const std::string& key, const std::string& payload);
+    bool send(const string& topic, const string& key, const string& payload);
 
     // Processa callbacks (delivery reports) pendentes.
     void poll(int timeout_ms = 0);
@@ -21,6 +23,6 @@ private:
         void dr_cb(RdKafka::Message &message) override;
     };
 
-    std::unique_ptr<RdKafka::Producer> producer_;
+    unique_ptr<RdKafka::Producer> producer_;
     DeliveryReportCb dr_cb_;
 };

@@ -3,6 +3,8 @@
 #include "../iso8583/iso_message.h"
 #include <string>
 
+using namespace std;
+
 using json = nlohmann::json;
 
 class IsoToJsonMapper {
@@ -19,6 +21,6 @@ public:
     static json mapIsoToJson(const IsoMessage& iso);
 
 private:
-    static std::string maskPan(const std::string& pan);
-    static int parseAmount(const std::string& amountStr);
+    static string maskPan(const string& pan);
+    static int parseAmount(const string& amountStr);
 };

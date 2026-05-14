@@ -4,6 +4,8 @@
 #include <vector>
 #include <cstdint>
 
+using namespace std;
+
 enum class FieldFormat {
     FIXED, LLVAR, LLLVAR
 };
@@ -21,22 +23,22 @@ struct FieldDef {
 
 class IsoMessage {
 public:
-    std::string mti;
-    std::map<int, std::string> fields;
+    string mti;
+    map<int, string> fields;
 
     bool has_field(int field) const {
         return fields.find(field) != fields.end();
     }
 
-    std::string get_field(int field) const {
+    string get_field(int field) const {
         auto it = fields.find(field);
         return it != fields.end() ? it->second : "";
     }
 
-    void set_field(int field, const std::string& val) {
+    void set_field(int field, const string& val) {
         fields[field] = val;
     }
 
-    std::string mask_pan() const;
-    std::string get_unique_key() const;
+    string mask_pan() const;
+    string get_unique_key() const;
 };

@@ -1,46 +1,39 @@
 #pragma once
 #include <string>
-#include <map>
-#include <mutex>
+#include <vector>
+#include <memory> // Para std::unique_ptr
+#include <asio.hpp> // Para asio::ip::tcp::socket
+
+using std::string;
+using std::vector;
+using asio::ip::tcp;
 
 class HSM {
 public:
     static HSM& getInstance();
 
-    /**
-     * @brief Inicializa as chaves mestras e PINs do mock database
-     */
-    void init();
+    void init(); // Agora apenas testa a conexão com o SoftHSM externo
 
-    /**
-     * @brief Extrai e valida um PIN (em ISO-0) contra o valor no banco
-     *
-     * @param pinBlockHex O bloco recebido no DE52
-     * @param pan O PAN do usuario (DE2)
-     * @return bool verdadeiro se o PIN confere, falso caso erro ou falha
-     */
-    bool validatePin(const std::string& pinBlockHex, const std::string& pan);
+    // Valida o PIN Block usando o serviço SoftHSM externo
+    bool validatePin(const string& pinBlockHex, const string& pan);
 
-    /**
-     * @brief Mascara logs
-     */
-    std::string maskPan(const std::string& pan);
+    // Métodos de criptografia/decriptografia (delegam para o SoftHSM externo)
+    string encryptData(const string& data);
+    string decryptData(const string& encryptedData);
 
-    /**
-     * @brief Gera o Token do PAN
-     */
-    std::string tokenize(const std::string& pan);
-
-    /**
-     * @brief Encripta o PAN com uma chave mestra HSM
-     */
-    std::string encryptData(const std::string& data);
-    std::string decryptData(const std::string& encryptedHex);
+    // Métodos de tokenização (podem delegar para um Tokenizer local ou remoto)
+    string maskPan(const string& pan);
 
 private:
-    HSM() = default;
+    HSM();
+    ~HSM();
+    HSM(const HSM&) = delete;
+    HSM& operator=(const HSM&) = delete;
 
-    std::string masterKey_;
-    std::map<std::string, std::string> mockPinDatabase_; // PAN -> PIN plaintext para testes
-    std::mutex mtx_;
+    // Comunicação com o serviço SoftHSM externo
+    string sendToSoftHSM(const string& message);
+
+    // Configurações de conexão
+    string softHsmIp_ = "127.0.0.1";
+    unsigned short softHsmPort_ = 8000;
 };

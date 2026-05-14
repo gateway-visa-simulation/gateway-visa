@@ -3,9 +3,10 @@
 #include <iomanip>
 #include <sstream>
 
-std::string JsonToIsoMapper::formatAmount(int amount) {
-    std::ostringstream ss;
-    ss << std::setw(12) << std::setfill('0') << amount;
+
+string JsonToIsoMapper::formatAmount(int amount) {
+    ostringstream ss;
+    ss << setw(12) << setfill('0') << amount;
     return ss.str();
 }
 
@@ -15,7 +16,7 @@ IsoMessage JsonToIsoMapper::mapJsonToIso(const json& response, const IsoMessage&
     // MTI Configuração
     // Em um cenario real, o MTI da resposta vem do JSON (ou e inferido)
     if (response.contains("mti")) {
-        res.mti = response["mti"].get<std::string>();
+        res.mti = response["mti"].get<string>();
     } else {
         // Padrao fallback (0110 auth response) se nao fornecido
         res.mti = "0110";
@@ -23,17 +24,17 @@ IsoMessage JsonToIsoMapper::mapJsonToIso(const json& response, const IsoMessage&
 
     // DE11: STAN - Correlacao OBRIGATORIA
     if (response.contains("stan")) {
-        res.set_field(11, response["stan"].get<std::string>());
+        res.set_field(11, response["stan"].get<string>());
     } else {
         LOG_ERROR("JSON de resposta nao contem STAN para correlacao!");
-        throw std::runtime_error("STAN missing in JSON response");
+        throw runtime_error("STAN missing in JSON response");
     }
 
     // DE39: Response Code
     if (response.contains("responseCode")) {
-        res.set_field(39, response["responseCode"].get<std::string>());
+        res.set_field(39, response["responseCode"].get<string>());
     } else {
-        LOG_WARN("Response code faltando no JSON, assumindo falha (96). STAN: {}", response["stan"].get<std::string>());
+        LOG_WARN("Response code faltando no JSON, assumindo falha (96). STAN: {}", response["stan"].get<string>());
         res.set_field(39, "96");
     }
 

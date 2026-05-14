@@ -3,19 +3,20 @@
 #include <stdexcept>
 #include <sstream>
 
-std::string IsoToJsonMapper::maskPan(const std::string& pan) {
+
+string IsoToJsonMapper::maskPan(const string& pan) {
     if (pan.length() < 10) return pan;
-    std::string masked = pan;
+    string masked = pan;
     for (size_t i = 6; i < masked.length() - 4; ++i) {
         masked[i] = '*';
     }
     return masked;
 }
 
-int IsoToJsonMapper::parseAmount(const std::string& amountStr) {
+int IsoToJsonMapper::parseAmount(const string& amountStr) {
     if (amountStr.empty()) return 0;
     try {
-        return std::stoi(amountStr);
+        return stoi(amountStr);
     } catch (...) {
         LOG_WARN("Falha ao fazer parse do Amount: {}", amountStr);
         return 0;
@@ -28,7 +29,7 @@ json IsoToJsonMapper::mapIsoToJson(const IsoMessage& iso) {
     // Validação de campos obrigatórios
     if (!iso.has_field(2) || !iso.has_field(4) || !iso.has_field(11)) {
         LOG_ERROR("Mensagem ISO sem campos obrigatorios (2, 4 ou 11)");
-        throw std::runtime_error("Missing mandatory ISO fields for JSON mapping");
+        throw runtime_error("Missing mandatory ISO fields for JSON mapping");
     }
 
     j["mti"] = iso.mti;
@@ -37,7 +38,7 @@ json IsoToJsonMapper::mapIsoToJson(const IsoMessage& iso) {
     j["stan"] = iso.get_field(11);
 
     // DE2: PAN (Sempre mascarado!)
-    std::string raw_pan = iso.get_field(2);
+    string raw_pan = iso.get_field(2);
     j["pan"] = maskPan(raw_pan);
 
     // DE4: Amount (Conversão de BCD/String '000000001000' para int '1000')
@@ -58,7 +59,7 @@ json IsoToJsonMapper::mapIsoToJson(const IsoMessage& iso) {
     // DE49: Currency
     if (iso.has_field(49)) j["currency"] = iso.get_field(49);
 
-    LOG_DEBUG("ISO to JSON map completado para STAN: {}", j["stan"].get<std::string>());
+    LOG_DEBUG("ISO to JSON map completado para STAN: {}", j["stan"].get<string>());
 
     return j;
 }

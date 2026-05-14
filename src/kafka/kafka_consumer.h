@@ -6,15 +6,17 @@
 #include <rdkafkacpp.h>
 #include <atomic>
 
+using namespace std;
+
 class KafkaConsumer {
 public:
-    using MessageHandler = std::function<void(const std::string& key, const std::string& payload)>;
+    using MessageHandler = function<void(const string& key, const string& payload)>;
 
-    KafkaConsumer(const std::string& brokers, const std::string& group_id);
+    KafkaConsumer(const string& brokers, const string& group_id);
     ~KafkaConsumer();
 
     // Inscreve no tópico
-    bool subscribe(const std::vector<std::string>& topics);
+    bool subscribe(const vector<string>& topics);
 
     // Inicia o loop de consumo (bloqueante - deve rodar em thread separada)
     void start_consuming(MessageHandler handler);
@@ -23,6 +25,6 @@ public:
     void stop();
 
 private:
-    std::unique_ptr<RdKafka::KafkaConsumer> consumer_;
-    std::atomic<bool> run_{false};
+    unique_ptr<RdKafka::KafkaConsumer> consumer_;
+    atomic<bool> run_{false};
 };

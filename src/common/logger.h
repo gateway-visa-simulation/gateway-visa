@@ -2,12 +2,14 @@
 #include <spdlog/spdlog.h>
 #include <memory>
 
+using namespace std;
+
 class Logger {
 public:
     static void init();
-    static std::shared_ptr<spdlog::logger> get();
+    static shared_ptr<spdlog::logger> get();
 private:
-    static std::shared_ptr<spdlog::logger> logger_;
+    static shared_ptr<spdlog::logger> logger_;
 };
 
 #define LOG_INFO(...) Logger::get()->info(__VA_ARGS__)

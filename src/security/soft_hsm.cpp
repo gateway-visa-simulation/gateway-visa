@@ -11,9 +11,9 @@ SoftHsm& SoftHsm::get_instance() {
     return instance;
 }
 
-bool SoftHsm::validate_retail_mac(const IsoMessage& msg, const std::string& mak_hex) {
+bool SoftHsm::validate_retail_mac(const IsoMessage& msg, const string& mak_hex) {
     // O MAC pode estar no DE 64 (primário) ou DE 128 (secundário)
-    std::string received_mac_hex;
+    string received_mac_hex;
     if (msg.has_field(128)) {
         received_mac_hex = msg.get_field(128);
     } else if (msg.has_field(64)) {
@@ -34,7 +34,7 @@ bool SoftHsm::validate_retail_mac(const IsoMessage& msg, const std::string& mak_
         LOG_ERROR("Invalid MAK size for Retail MAC. Must be 16 bytes (32 hex chars).");
         return false;
     }
-    std::vector<uint8_t> key1(mak_bytes.begin(), mak_bytes.begin() + 8);
+    vector<uint8_t> key1(mak_bytes.begin(), mak_bytes.begin() + 8);
 
     // 2. Calcular o MAC
     auto encrypted_block = des_encrypt_cbc(key1, data_block);
@@ -42,7 +42,7 @@ bool SoftHsm::validate_retail_mac(const IsoMessage& msg, const std::string& mak_
         return false;
     }
     // O MAC é o último bloco de 8 bytes do resultado
-    std::vector<uint8_t> calculated_mac(encrypted_block.end() - 8, encrypted_block.end());
+    vector<uint8_t> calculated_mac(encrypted_block.end() - 8, encrypted_block.end());
 
     // 3. Comparar
     if (calculated_mac == received_mac_bytes) {
@@ -55,10 +55,10 @@ bool SoftHsm::validate_retail_mac(const IsoMessage& msg, const std::string& mak_
     }
 }
 
-std::optional<std::string> SoftHsm::decrypt_pin_block_iso0(const std::string& pin_block_hex, const std::string& pan, const std::string& zpk_hex) {
+optional<string> SoftHsm::decrypt_pin_block_iso0(const string& pin_block_hex, const string& pan, const string& zpk_hex) {
     if (zpk_hex.size() < 32) {
         LOG_ERROR("Invalid ZPK size for PIN block decryption. Must be 16 bytes (32 hex chars).");
-        return std::nullopt;
+        return nullopt;
     }
 
     // 1. Preparar dados
@@ -72,13 +72,13 @@ std::optional<std::string> SoftHsm::decrypt_pin_block_iso0(const std::string& pi
     // São os 12 últimos dígitos do PAN, excluindo o dígito verificador.
     if (pan.length() < 13) {
         LOG_ERROR("PAN is too short for ISO-0 PIN block processing.");
-        return std::nullopt;
+        return nullopt;
     }
-    std::string pan_part = "0000" + pan.substr(pan.length() - 13, 12);
+    string pan_part = "0000" + pan.substr(pan.length() - 13, 12);
     auto pan_block = hex_to_bytes(pan_part);
 
     // 4. Fazer o XOR para obter o bloco de PIN puro
-    std::vector<uint8_t> pin_data_block(8);
+    vector<uint8_t> pin_data_block(8);
     for (size_t i = 0; i < 8; ++i) {
         pin_data_block[i] = clear_pin_block[i] ^ pan_block[i];
     }
@@ -88,17 +88,17 @@ std::optional<std::string> SoftHsm::decrypt_pin_block_iso0(const std::string& pi
     int pin_len = pin_data_block[0] & 0x0F;
     if (pin_len < 4 || pin_len > 12) {
         LOG_ERROR("Invalid PIN length decoded from PIN block: {}", pin_len);
-        return std::nullopt;
+        return nullopt;
     }
 
-    std::stringstream ss;
-    ss << std::hex << std::setfill('0');
+    stringstream ss;
+    ss << hex << setfill('0');
     for(size_t i = 1; i < pin_data_block.size(); ++i) {
-        ss << std::setw(2) << (int)pin_data_block[i];
+        ss << setw(2) << (int)pin_data_block[i];
     }
 
-    std::string pin_and_padding = ss.str();
-    std::string pin = pin_and_padding.substr(0, pin_len);
+    string pin_and_padding = ss.str();
+    string pin = pin_and_padding.substr(0, pin_len);
 
     LOG_INFO("PIN block decrypted successfully. PIN length: {}", pin_len);
     return pin;
@@ -107,8 +107,8 @@ std::optional<std::string> SoftHsm::decrypt_pin_block_iso0(const std::string& pi
 
 // --- Helpers ---
 
-std::vector<uint8_t> SoftHsm::build_mac_data_block(const IsoMessage& msg) {
-    std::vector<uint8_t> block;
+vector<uint8_t> SoftHsm::build_mac_data_block(const IsoMessage& msg) {
+    vector<uint8_t> block;
     // MTI
     block.insert(block.end(), msg.mti.begin(), msg.mti.end());
     // Data Elements
@@ -121,18 +121,18 @@ std::vector<uint8_t> SoftHsm::build_mac_data_block(const IsoMessage& msg) {
     return block;
 }
 
-std::vector<uint8_t> SoftHsm::des_encrypt_cbc(const std::vector<uint8_t>& key, const std::vector<uint8_t>& data) {
+vector<uint8_t> SoftHsm::des_encrypt_cbc(const vector<uint8_t>& key, const vector<uint8_t>& data) {
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (!ctx) return {};
 
     // Padding manual para ser múltiplo de 8
-    std::vector<uint8_t> padded_data = data;
+    vector<uint8_t> padded_data = data;
     size_t padding_needed = 8 - (data.size() % 8);
     if (padding_needed != 8) {
         padded_data.insert(padded_data.end(), padding_needed, 0x00);
     }
 
-    std::vector<uint8_t> ciphertext(padded_data.size());
+    vector<uint8_t> ciphertext(padded_data.size());
     int len = 0;
     unsigned char iv[8] = {0}; // IV de zeros
 
@@ -144,11 +144,11 @@ std::vector<uint8_t> SoftHsm::des_encrypt_cbc(const std::vector<uint8_t>& key, c
     return ciphertext;
 }
 
-std::vector<uint8_t> SoftHsm::tdes_decrypt_ecb(const std::vector<uint8_t>& key, const std::vector<uint8_t>& data) {
+vector<uint8_t> SoftHsm::tdes_decrypt_ecb(const vector<uint8_t>& key, const vector<uint8_t>& data) {
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (!ctx) return {};
 
-    std::vector<uint8_t> plaintext(data.size());
+    vector<uint8_t> plaintext(data.size());
     int len = 0;
 
     // Para TDES, a chave pode ser de 16 ou 24 bytes. OpenSSL lida com isso.
@@ -163,20 +163,20 @@ std::vector<uint8_t> SoftHsm::tdes_decrypt_ecb(const std::vector<uint8_t>& key, 
     return plaintext;
 }
 
-std::vector<uint8_t> SoftHsm::hex_to_bytes(const std::string& hex) {
-    std::vector<uint8_t> bytes;
+vector<uint8_t> SoftHsm::hex_to_bytes(const string& hex) {
+    vector<uint8_t> bytes;
     for (unsigned int i = 0; i < hex.length(); i += 2) {
-        std::string byteString = hex.substr(i, 2);
-        bytes.push_back(static_cast<uint8_t>(std::stoul(byteString, nullptr, 16)));
+        string byteString = hex.substr(i, 2);
+        bytes.push_back(static_cast<uint8_t>(stoul(byteString, nullptr, 16)));
     }
     return bytes;
 }
 
-std::string SoftHsm::bytes_to_hex(const std::vector<uint8_t>& bytes) {
-    std::stringstream ss;
-    ss << std::hex << std::setfill('0');
+string SoftHsm::bytes_to_hex(const vector<uint8_t>& bytes) {
+    stringstream ss;
+    ss << hex << setfill('0');
     for (const auto& byte : bytes) {
-        ss << std::setw(2) << static_cast<int>(byte);
+        ss << setw(2) << static_cast<int>(byte);
     }
     return ss.str();
 }

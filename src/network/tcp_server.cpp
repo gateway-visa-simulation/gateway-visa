@@ -1,7 +1,7 @@
 #include "tcp_server.h"
 #include "../common/logger.h"
 
-TcpServer::TcpServer(asio::io_context &io_context, short port, std::shared_ptr<ThreadPool> thread_pool)
+TcpServer::TcpServer(asio::io_context &io_context, short port, shared_ptr<ThreadPool> thread_pool)
     : acceptor_(io_context) {
     // Apenas constrói o acceptor
 
@@ -20,10 +20,10 @@ TcpServer::TcpServer(asio::io_context &io_context, short port, std::shared_ptr<T
 
 void TcpServer::do_accept() {
     acceptor_.async_accept(
-        [this](std::error_code ec, tcp::socket socket) {
+        [this](error_code ec, tcp::socket socket) {
             if (!ec) {
                 LOG_INFO("Accepted connection from {}", socket.remote_endpoint().address().to_string());
-                std::make_shared<Session>(std::move(socket), thread_pool_)->start();
+                make_shared<Session>(move(socket), thread_pool_)->start();
             }
             do_accept();
         });
