@@ -240,3 +240,9 @@ void Session::do_write(const vector<uint8_t> &data) {
                           }
                       });
 }
+
+void Session::send_response(const vector<uint8_t> &data) {
+    // For thread-safety, post the write to the io_context's thread by reusing do_write
+    // do_write already uses asio::async_write which is thread-safe if called from any thread.
+    do_write(data);
+}

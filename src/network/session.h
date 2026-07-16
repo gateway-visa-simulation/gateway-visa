@@ -14,6 +14,9 @@ public:
     Session(tcp::socket socket, shared_ptr<ThreadPool> thread_pool);
     void start();
 
+    // Public helper to send a response (built bytes)
+    void send_response(const vector<uint8_t>& data);
+
 private:
     void do_read_header();
     void do_read_body(size_t length);

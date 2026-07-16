@@ -18,6 +18,8 @@
 #include <sstream>
 #include <locale>
 #include "lockfree/lockfree_queue.h"
+#include "network/session_registry.h"
+#include "iso8583/iso_parser.h"
 
 void metrics_printer_thread() {
     while (true) {
@@ -155,7 +157,16 @@ int main() {
                         IsoMessage responseIso = JsonToIsoMapper::mapJsonToIso(original_json);
                         LOG_INFO("<< [LOCK-FREE CONSUMER] Resposta Mapeada! STAN: {} | Código: {}",
                                  responseIso.get_field(11), responseIso.get_field(39));
-                        // TODO: apply response (e.g., forward to acquirer connection or update state)
+                        // Try to find original session and forward the response
+                        auto session = SessionRegistry::get().pop_session(responseIso.get_field(11));
+                        if (session) {
+                            auto res_data = IsoParser::build(responseIso);
+                            session->send_response(res_data);
+                            DatabaseManager::getInstance().logTransaction(responseIso, responseIso.get_field(39), "ISSUER_RESPONSE");
+                        } else {
+                            LOG_WARN("No session found for STAN {}. Storing response log only.", responseIso.get_field(11));
+                            DatabaseManager::getInstance().logTransaction(responseIso, responseIso.get_field(39), "ISSUER_RESPONSE_NO_SESSION");
+                        }
                     } catch (const std::exception &e) {
                         LOG_ERROR("Erro ao processar/decriptografar payload do consumidor Lock-Free (STAN: {}): {}", item.key, e.what());
                     }
