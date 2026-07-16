@@ -15,6 +15,9 @@
 #include "database/database_manager.h"
 #include <chrono>
 #include <nlohmann/json.hpp>
+#include <sstream>
+#include <locale>
+#include "lockfree/lockfree_queue.h"
 
 void metrics_printer_thread() {
     while (true) {
@@ -45,6 +48,9 @@ int main() {
 
         DatabaseManager::getInstance().init(app_config.db_connection_string);
         HSM::getInstance().init();
+
+        // Lock-free queue initialization
+        global_lockfree_queue = create_boost_lockfree_queue(32768);
 
         // --- Registro da Lógica de Roteamento Dinâmico via Banco de Dados ---
         Router::get_instance().setRoutingLogic([](const IsoMessage &msg) -> std::optional<BinRoute> {
@@ -102,11 +108,28 @@ int main() {
                 return "51";
             }
 
-            if (msg.mti == "0400") {
-                return std::string(IssuerService::get_instance().process_reversal(msg));
+            // Build JSON payload and enqueue to lock-free queue
+            try {
+                nlohmann::json original_json = IsoToJsonMapper::mapIsoToJson(msg);
+                std::string plaintext_payload = original_json.dump();
+                std::string encrypted_payload_hex = HSM::getInstance().encryptData(plaintext_payload);
+
+                nlohmann::json envelope;
+                envelope["stan"] = original_json["stan"];
+                envelope["encrypted_payload"] = encrypted_payload_hex;
+
+                std::string final_payload = envelope.dump();
+                std::string key = original_json["stan"].get<std::string>();
+
+                LFMessage m{key, final_payload};
+                if (global_lockfree_queue && global_lockfree_queue->enqueue(m)) {
+                    return "00";
+                }
+            } catch (const std::exception &e) {
+                LOG_ERROR("Erro ao mapear e enfileirar mensagem no lock-free (STAN: {}): {}", msg.get_field(11), e.what());
             }
 
-            return std::string(IssuerService::get_instance().process_transaction(msg));
+            return "91";
         });
 
         Router::get_instance().registerIssuerHandler("INTERNAL",
@@ -119,7 +142,24 @@ int main() {
 
         // Kafka consumer disabled — Lock-Free will handle incoming responses
 
+        // Lock-free consumer thread
+        std::thread lockfree_consumer([]() {
+            while (true) {
+                void* item = nullptr;
+                if (global_lockfree_queue && global_lockfree_queue->dequeue(item)) {
+                    // TODO: Replace with actual response type
+                    // auto* resp = static_cast<ResponseType*>(item);
+                    // Decrypt, map, log, etc. as in previous Kafka consumer
+                    // LOG_INFO("Processed response");
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+            }
+        });
+        lockfree_consumer.detach();
+
         // Iniciar threads
+// (Lock-free consumer thread started above)
         std::thread cache_th(cache_refresh_thread, app_config.cache_refresh_interval_sec);
         cache_th.detach();
 
