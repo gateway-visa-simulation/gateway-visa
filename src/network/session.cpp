@@ -1,4 +1,5 @@
 #include "session.h"
+#include "session_registry.h"
 #include "../common/logger.h"
 #include "../iso8583/iso_parser.h"
 #include "../iso8583/iso_builder.h"
