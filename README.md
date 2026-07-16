@@ -144,6 +144,61 @@ Para evoluir este simulador para um sistema mais robusto e fiel a uma rede de pa
 
     Observação: logs e HSM continuam disponíveis para criptografia e auditoria local.
 
+    Exemplo mínimo (C++):
+
+    -  Interface sugerida (headers):
+
+       // lockfree_queue.h
+       class ILockFreeQueue {
+       public:
+           virtual ~ILockFreeQueue() = default;
+           // Enfileira uma mensagem (key é STAN, payload é JSON criptografado/serializado)
+           virtual bool enqueue(const std::string &key, const std::string &payload) = 0;
+           // Tenta desenfileirar. Retorna true se obteve uma mensagem.
+           virtual bool try_dequeue(std::string &key, std::string &payload) = 0;
+       };
+
+    -  Como integrar no código (exemplo em main.cpp):
+
+       // declarar um ponteiro global/compartilhado (implementação concreta fica em outro módulo)
+       extern std::shared_ptr<ILockFreeQueue> global_lockfree_queue;
+
+       // No handler que antes publicava no Kafka, substituir por:
+       std::string final_payload = /* json criptografado */;
+       std::string key = /* STAN */;
+       if (global_lockfree_queue && global_lockfree_queue->enqueue(key, final_payload)) {
+           return "00"; // Aceitar/confirmar ao acquirer
+       } else {
+           return "91"; // Falha temporária
+       }
+
+    -  Consumidor (thread) exemplo:
+
+       std::thread consumer_thread([](){
+           while (running) {
+               std::string key, payload;
+               if (global_lockfree_queue->try_dequeue(key, payload)) {
+                   // Decrypt/parse payload, mapear para IsoMessage e processar
+                   auto original_json = nlohmann::json::parse(payload);
+                   IsoMessage responseIso = JsonToIsoMapper::mapJsonToIso(original_json);
+                   // Chamar lógica que aplica a resposta (por ex. atualizar estado, enviar ao acquirer)
+               } else {
+                   std::this_thread::sleep_for(std::chrono::milliseconds(1));
+               }
+           }
+       });
+
+    -  Requisitos não funcionais:
+       - Low-latency (microseconds-ms), sem locks trocados entre produtores/consumidores.
+       - Backpressure: enfileiramento pode falhar quando cheio; definir política de retry/throwaway.
+       - Thread-safety: implementação deve ser segura para múltiplos produtores.
+
+    -  Testes sugeridos:
+       - Throughput: 100k+ messages/s realistic benchmark (ajustar conforme HW).
+       - Resiliência: falha na enfileiração e recuperação sem perda de mensagens críticas.
+
+    Se quiser um exemplo concreto (ex.: Folly ProducerConsumerQueue ou Boost::lockfree::queue), indicar a lib preferida e adiciono o módulo de integração.
+
 3.  **Controle de Concorrência e Performance:**
     -   Implementar um `ThreadPool` para separar threads de I/O e threads de processamento de lógica de negócio.
     -   Mecanismos de idempotência para evitar reprocessamento de transações duplicadas.

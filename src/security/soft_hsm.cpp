@@ -55,7 +55,7 @@ bool SoftHsm::validate_retail_mac(const IsoMessage& msg, const string& mak_hex) 
     }
 }
 
-optional<string> SoftHsm::decrypt_pin_block_iso0(const string& pin_block_hex, const string& pan, const string& zpk_hex) {
+optional<string> SoftHsm::decrypt_pin_block_iso0(const vector<uint8_t>& pin_block_bytes, const string& pan, const string& zpk_hex) {
     if (zpk_hex.size() < 32) {
         LOG_ERROR("Invalid ZPK size for PIN block decryption. Must be 16 bytes (32 hex chars).");
         return nullopt;
@@ -63,7 +63,6 @@ optional<string> SoftHsm::decrypt_pin_block_iso0(const string& pin_block_hex, co
 
     // 1. Preparar dados
     auto zpk_bytes = hex_to_bytes(zpk_hex);
-    auto pin_block_bytes = hex_to_bytes(pin_block_hex);
 
     // 2. Decifrar o PIN Block com TDES
     auto clear_pin_block = tdes_decrypt_ecb(zpk_bytes, pin_block_bytes);

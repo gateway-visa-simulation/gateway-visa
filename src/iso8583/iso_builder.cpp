@@ -1,6 +1,5 @@
 #include "iso_builder.h"
 
-
 IsoMessage IsoBuilder::build_response(const IsoMessage& request, const string& response_code) {
     IsoMessage response;
 
@@ -12,19 +11,27 @@ IsoMessage IsoBuilder::build_response(const IsoMessage& request, const string& r
     } else if (request.mti == "0400") {
         response.mti = "0410";
     } else {
-        response.mti = "0" + request.mti.substr(1, 1) + "1" + request.mti.substr(3, 1);
+        // Fallback genérico para outros tipos de mensagem
+        response.mti = request.mti; // Mantém o MTI para mensagens não esperadas
     }
 
-    // Copy mandatory fields
-    int mandatory_fields[] = {2, 3, 4, 7, 11, 12, 13, 22, 41, 42, 49};
-    for (int field : mandatory_fields) {
-        if (request.has_field(field)) {
-            response.set_field(field, request.get_field(field));
+    // Copia todos os campos da requisição para a resposta, exceto o MTI e o MAC
+    for (const auto& pair : request.fields) {
+        if (pair.first != 64 && pair.first != 128) {
+            response.set_field(pair.first, pair.second);
         }
     }
 
-    // Set response code
+    // Define ou sobrescreve o código de resposta
     response.set_field(39, response_code);
+
+    // Garante que campos essenciais para a correlação estejam presentes
+    if (request.has_field(11)) {
+        response.set_field(11, request.get_field(11));
+    }
+    if (request.has_field(41)) {
+        response.set_field(41, request.get_field(41));
+    }
 
     return response;
 }

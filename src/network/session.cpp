@@ -6,7 +6,6 @@
 #include "../metrics/metrics_registry.h"
 #include "../database/database_manager.h"
 #include "../security/soft_hsm.h"
-#include "../security/hsm.h" // Incluindo o HSM remoto
 #include <iostream>
 #include <chrono>
 #include <iomanip>
@@ -72,7 +71,6 @@ void Session::handle_network_message(const IsoMessage &req) {
     LOG_INFO("Processing Network Management message (0800)");
 
     string nmm_code = req.get_field(70);
-    // CORREÇÃO: Remove espaços ou caracteres nulos que podem vir do campo FIXED ASCII
     nmm_code.erase(remove_if(nmm_code.begin(), nmm_code.end(),
                              [](unsigned char c) { return isspace(c) || c == '\0'; }),
                    nmm_code.end());
@@ -85,7 +83,6 @@ void Session::handle_network_message(const IsoMessage &req) {
 
     DatabaseManager::getInstance().logTransaction(req, response_code, "NETWORK_MSG");
 
-    // Cria uma resposta limpa e preenche apenas os campos necessários
     IsoMessage res;
     res.mti = "0810";
     res.set_field(7, req.get_field(7));
@@ -114,14 +111,10 @@ void Session::process_message(const vector<uint8_t> &data) {
 
         if (req.mti == "0100" || req.mti == "0200" || req.mti == "0400" || req.mti == "0220") {
 
-            // --- CORREÇÃO DEFINITIVA DO MAC (A0) ---
             if (req.mti != "0400") {
-                // 1. Verificamos se a mensagem REALMENTE contém um campo de MAC (Bit 64 ou 128)
                 bool has_mac = req.has_field(64) || req.has_field(128);
 
                 if (has_mac) {
-                    // 2. Se tem MAC, buscamos a chave de MAC (MAK) de forma dinâmica no SoftHSM
-                    // Em homologação, podemos usar um label fixo ou buscar pelo campo 41 (Terminal ID)
                     string mak_label = "RETAIL_MAK_01";
 
                     if (!SoftHsm::get_instance().validate_retail_mac(req, mak_label)) {
@@ -135,28 +128,32 @@ void Session::process_message(const vector<uint8_t> &data) {
                     }
                     LOG_INFO("MAC validated successfully for STAN {}", req.get_field(11));
                 } else {
-                    // 3. Se não tem MAC e estamos em ambiente de teste, apenas logamos um aviso
-                    // Em produção, você poderia rejeitar se o MAC for obrigatório para aquele BIN
                     LOG_DEBUG("Skipping MAC validation for STAN {}: No MAC field present in message.",
                               req.get_field(11));
                 }
             }
 
-            // --- VALIDAÇÃO DE PIN NO HSM REMOTO ---
+            // REVERTIDO: Validação de PIN é executada sempre que o campo 52 está presente.
             if (req.has_field(52) && req.has_field(2)) {
-                std::string pinBlock = req.get_field(52);
-                std::string pan = req.get_field(2);
+                string pin_block_str = req.get_field(52);
+                vector<uint8_t> pin_block_bytes(pin_block_str.begin(), pin_block_str.end());
+                string pan = req.get_field(2);
+                string zpk_hex = "0123456789ABCDEFFEDCBA9876543210";
 
-                LOG_INFO("Iniciando validação de PIN no SoftHSM remoto para PAN {}", req.mask_pan());
+                LOG_INFO("Iniciando validação de PIN com SoftHSM local para PAN {}", req.mask_pan());
+                LOG_DEBUG("Using ZPK for decryption: {}", zpk_hex);
 
-                if (!HSM::getInstance().validatePin(pinBlock, pan)) {
-                    LOG_WARN("PIN validation failed via remote SoftHSM for STAN {}", req.get_field(11));
-                    auto res = IsoBuilder::build_response(req, "55"); // 55: Senha incorreta
+                auto decrypted_pin_opt = SoftHsm::get_instance().decrypt_pin_block_iso0(pin_block_bytes, pan, zpk_hex);
+
+                if (!decrypted_pin_opt.has_value()) {
+                    LOG_WARN("PIN validation failed for STAN {}. Could not decrypt PIN block.", req.get_field(11));
+                    auto res = IsoBuilder::build_response(req, "55");
                     DatabaseManager::getInstance().logTransaction(req, "55", "INVALID_PIN");
                     auto res_data = IsoParser::build(res);
                     do_write(res_data);
                     return;
                 }
+                LOG_INFO("PIN block decrypted successfully for STAN {}", req.get_field(11));
             }
 
             MetricsRegistry::get().record_transaction();
@@ -170,7 +167,7 @@ void Session::process_message(const vector<uint8_t> &data) {
                 do_write(res_data);
                 return;
             }
-            //000005_4350870193822776_0504190255
+
             auto global_config = DatabaseManager::getInstance().getGlobalConfig();
             string issuer_id = "UNKNOWN";
             if (req.has_field(2) && req.get_field(2).length() >= 6) {

@@ -9,10 +9,7 @@ using namespace std;
 struct Config {
     string db_connection_string;
     int cache_refresh_interval_sec = 30;
-    string kafka_brokers;
-    string kafka_request_topic;
-    string kafka_response_topic;
-    short server_port = 8889;
+    short server_port = 0;
 
     static Config load(const string &filename = "config.json") {
         Config config;
@@ -26,12 +23,6 @@ struct Config {
                 }
                 if (j.contains("cache") && j["cache"].contains("refresh_interval_sec")) {
                     config.cache_refresh_interval_sec = j["cache"]["refresh_interval_sec"];
-                }
-                if (j.contains("kafka")) {
-                    if (j["kafka"].contains("brokers")) config.kafka_brokers = j["kafka"]["brokers"];
-                    if (j["kafka"].contains("request_topic")) config.kafka_request_topic = j["kafka"]["request_topic"];
-                    if (j["kafka"].contains("response_topic"))
-                        config.kafka_response_topic = j["kafka"]["response_topic"];
                 }
                 if (j.contains("server") && j["server"].contains("port")) {
                     config.server_port = j["server"]["port"];

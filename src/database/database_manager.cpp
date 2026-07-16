@@ -3,6 +3,9 @@
 #include <stdexcept>
 #include <random>
 #include <optional>
+#include <regex>
+#include <sstream> // Para std::stringstream
+#include <locale>  // Para std::locale::classic()
 
 // Construtor
 DatabaseManager::DatabaseManager() {
@@ -106,7 +109,14 @@ void DatabaseManager::logTransaction(const IsoMessage &msg, const std::string &r
 
         std::optional<double> amount;
         if (msg.has_field(4)) {
-            amount = std::stod(msg.get_field(4)) / 100.0;
+            // CORREÇÃO FINAL E DEFINITIVA: O campo 4 é o valor em centavos.
+            // 1. Converte a string (ex: "199" para 1.99) para double de forma locale-safe.
+            std::stringstream ss(msg.get_field(4));
+            ss.imbue(std::locale::classic());
+            double amount_in_cents;
+            ss >> amount_in_cents;
+            // 2. Divide por 100.0 para obter o valor na unidade principal.
+            amount = amount_in_cents / 100.0;
         }
 
         std::string processing_code = msg.has_field(3) ? msg.get_field(3) : "";
@@ -120,8 +130,8 @@ void DatabaseManager::logTransaction(const IsoMessage &msg, const std::string &r
 
         txn.exec_params(
             "INSERT INTO visa.visanet_network_log "
-            "(stan, mti, pan_masked, amount, processing_code, terminal_id, merchant_id, issuer_id, response_code, status) "
-            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+            "(stan, mti, pan_masked, amount, processing_code, terminal_id, merchant_id, issuer_id, response_code, status, request_timestamp) "
+            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())",
             stan, mti, pan_masked, amount, processing_code, terminal_id, merchant_id, db_issuer_id, response_code,
             status
         );
@@ -139,20 +149,32 @@ GlobalConfig DatabaseManager::getGlobalConfig() {
     return global_config_cache_;
 }
 
-std::optional<SimulatedCard> DatabaseManager::lookupCard(const std::string &pan) { {
+std::optional<SimulatedCard> DatabaseManager::lookupCard(const std::string &pan) {
+    // Limpa o PAN de caracteres não numéricos (como 'f' do BCD) para a consulta
+    std::string clean_pan = std::regex_replace(pan, std::regex("[^0-9]"), "");
+
+    {
         std::shared_lock<std::shared_mutex> lock(card_cache_mutex_);
-        auto it = card_cache_.find(pan);
+        auto it = card_cache_.find(clean_pan);
         if (it != card_cache_.end()) {
-            LOG_DEBUG("Cache hit para o cartão: {}", pan);
+            LOG_DEBUG("Cache hit para o cartão: {}", clean_pan);
             return it->second;
         }
     }
 
-    LOG_DEBUG("Cache miss para o cartão: {}. Consultando o banco...", pan);
-    auto card = loadSimulatedCardFromDb(pan);
+    LOG_DEBUG("Cache miss para o cartão: {}. Consultando o banco...", clean_pan);
+    auto card = loadSimulatedCardFromDb(clean_pan);
     if (card) {
         std::unique_lock<std::shared_mutex> lock(card_cache_mutex_);
-        card_cache_[pan] = *card;
+        card_cache_[clean_pan] = *card;
+    } else {
+        string masked_pan = clean_pan;
+        if (masked_pan.length() >= 10) {
+            for (size_t i = 6; i < masked_pan.length() - 4; ++i) {
+                masked_pan[i] = '*';
+            }
+        }
+        LOG_WARN("Cartão não encontrado no banco: {}", masked_pan);
     }
     return card;
 }
@@ -205,9 +227,10 @@ std::optional<PreviousTransactionResult> DatabaseManager::getPreviousTransaction
         }
 
         pqxx::work txn(*conn_);
+
         pqxx::result r = txn.exec_params(
             "SELECT response_code, status FROM visa.visanet_network_log "
-            "WHERE stan = $1 AND pan_masked = $2 AND created_at >= NOW() - INTERVAL '5 minutes' "
+            "WHERE stan = $1 AND pan_masked = $2 AND processed_at >= NOW() - INTERVAL '5 minutes' "
             "ORDER BY id DESC LIMIT 1", stan, masked_pan);
 
         if (!r.empty()) {
@@ -225,6 +248,10 @@ std::optional<PreviousTransactionResult> DatabaseManager::getPreviousTransaction
 // --- Métodos de Atualização ---
 
 bool DatabaseManager::updateCardBalance(const std::string &pan, double amount) {
+    // CORREÇÃO: Garante que o PAN usado na query UPDATE esteja limpo.
+    std::string clean_pan = std::regex_replace(pan, std::regex("[^0-9]"), "");
+    if (clean_pan.empty()) return false;
+
     try {
         std::lock_guard<std::mutex> db_lock(db_mutex_);
         connect_if_needed();
@@ -238,12 +265,12 @@ bool DatabaseManager::updateCardBalance(const std::string &pan, double amount) {
             "UPDATE visa.visanet_simulated_cards "
             "SET balance = balance - $1, daily_spent = daily_spent + $1 "
             "WHERE pan = $2 AND balance >= $1 AND is_active = TRUE",
-            amount, pan);
+            amount, clean_pan); // Usa o PAN limpo
         txn.commit();
 
         if (r.affected_rows() > 0) {
             std::unique_lock<std::shared_mutex> lock(card_cache_mutex_);
-            card_cache_.erase(pan);
+            card_cache_.erase(clean_pan); // Invalida o cache com o PAN limpo
             return true;
         }
     } catch (const std::exception &e) {
@@ -253,6 +280,10 @@ bool DatabaseManager::updateCardBalance(const std::string &pan, double amount) {
 }
 
 bool DatabaseManager::refundCardBalance(const std::string &pan, double amount) {
+    // CORREÇÃO: Garante que o PAN usado na query UPDATE esteja limpo.
+    std::string clean_pan = std::regex_replace(pan, std::regex("[^0-9]"), "");
+    if (clean_pan.empty()) return false;
+
     try {
         std::lock_guard<std::mutex> db_lock(db_mutex_);
         connect_if_needed();
@@ -266,12 +297,12 @@ bool DatabaseManager::refundCardBalance(const std::string &pan, double amount) {
             "UPDATE visa.visanet_simulated_cards "
             "SET balance = balance + $1, daily_spent = daily_spent - $1 "
             "WHERE pan = $2",
-            amount, pan);
+            amount, clean_pan); // Usa o PAN limpo
         txn.commit();
 
         if (r.affected_rows() > 0) {
             std::unique_lock<std::shared_mutex> lock(card_cache_mutex_);
-            card_cache_.erase(pan);
+            card_cache_.erase(clean_pan); // Invalida o cache com o PAN limpo
             return true;
         }
     } catch (const std::exception &e) {

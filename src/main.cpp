@@ -46,8 +46,6 @@ int main() {
         DatabaseManager::getInstance().init(app_config.db_connection_string);
         HSM::getInstance().init();
 
-        // Kafka producer disabled — using Lock-Free / direct IssuerService
-
         // --- Registro da Lógica de Roteamento Dinâmico via Banco de Dados ---
         Router::get_instance().setRoutingLogic([](const IsoMessage &msg) -> std::optional<BinRoute> {
             // Se for uma mensagem de rede, não há rota a ser determinada.

@@ -5,6 +5,8 @@
 #include <thread>
 #include <chrono>
 #include <random>
+#include <sstream> // Para std::stringstream
+#include <locale>  // Para std::locale::classic()
 
 IssuerService& IssuerService::get_instance() {
     static IssuerService instance;
@@ -48,7 +50,10 @@ string IssuerService::process_transaction(const IsoMessage& req) {
     // Realizar a atualização do saldo e validar fundos
     double amount = 0.0;
     if (req.has_field(4)) {
-        amount = std::stod(req.get_field(4)) / 100.0;
+        // CORREÇÃO LOCALE-SAFE: Usa um stringstream com o locale "classic" para garantir que '.' é o separador.
+        std::stringstream ss(req.get_field(4));
+        ss.imbue(std::locale::classic());
+        ss >> amount;
     }
 
     if (!DatabaseManager::getInstance().updateCardBalance(pan, amount)) {
@@ -72,7 +77,10 @@ string IssuerService::process_reversal(const IsoMessage& req) {
 
     double amount = 0.0;
     if (req.has_field(4)) {
-        amount = std::stod(req.get_field(4)) / 100.0;
+        // CORREÇÃO LOCALE-SAFE: Usa um stringstream com o locale "classic"
+        std::stringstream ss(req.get_field(4));
+        ss.imbue(std::locale::classic());
+        ss >> amount;
     }
 
     // Realiza o estorno do saldo

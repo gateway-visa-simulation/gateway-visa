@@ -12,6 +12,7 @@ string IsoMessage::mask_pan() const {
 }
 
 string IsoMessage::get_unique_key() const {
-    string key = get_field(11) + "_" + get_field(2) + "_" + get_field(7);
+    // CORREÇÃO: Usa mais campos para garantir uma chave de idempotência mais robusta.
+    string key = get_field(11) + "_" + get_field(2) + "_" + get_field(7) + get_field(12) + get_field(13);
     return key;
 }

@@ -15,7 +15,7 @@ public:
     bool validate_retail_mac(const IsoMessage& msg, const string& mak_hex);
 
     // Decifra um PIN Block (formato ISO-0) e retorna o PIN em texto plano.
-    optional<string> decrypt_pin_block_iso0(const string& pin_block_hex, const string& pan, const string& zpk_hex);
+    optional<string> decrypt_pin_block_iso0(const vector<uint8_t>& pin_block_bytes, const string& pan, const string& zpk_hex);
 
 private:
     SoftHsm() = default;
