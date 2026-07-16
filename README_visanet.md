@@ -136,6 +136,14 @@ Para evoluir este simulador para um sistema mais robusto e fiel a uma rede de pa
 2.  **Integração (Lock-Free):**
     -   Publicações/consumo via processamento local lock-free; Kafka foi removido desta versão.
 
+    Configuração e uso (Lock‑Free):
+    -  Variáveis/flags: use o campo "development.enable_network_bypass" no config.json para habilitar cenários de bypass em desenvolvimento.
+    -  Dependências: nenhuma externa necessária — o fluxo utiliza IssuerService e DatabaseManager (em memória/DB).
+    -  Como operar: garanta que a tabela de emissores/roteamento (visa.visanet_issuers / visanet_bin_table) aponte para um handler do tipo "INTERNAL" ou "IssuerLocal"; as requisições serão processadas localmente sem broker.
+    -  Integração futura: para conectar uma fila lock‑free concreta (ring buffer, SPSC queue), forneça os headers/assinaturas e a integração será adicionada ao fluxo.
+
+    Observação: logs e HSM continuam disponíveis para criptografia e auditoria local.
+
 3.  **Controle de Concorrência e Performance:**
     -   Implementar um `ThreadPool` para separar threads de I/O e threads de processamento de lógica de negócio.
     -   Mecanismos de idempotência para evitar reprocessamento de transações duplicadas.
