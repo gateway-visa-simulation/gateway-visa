@@ -44,6 +44,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(libpqxx)
 
+# Boost
+find_package(Boost REQUIRED)
+
 
 # --- Executável Principal ---
 add_executable(gateway_visa
@@ -72,6 +75,9 @@ add_executable(gateway_visa
         src/security/hsm_service.cpp
         src/database/database_manager.cpp
         src/security/soft_hsm.cpp
+    src/lockfree/boost_lockfree_queue.cpp
+    src/lockfree/global_lockfree.cpp
+    src/network/session_registry.cpp
 )
 
 # --- Diretórios de Inclusão ---
@@ -82,6 +88,7 @@ target_include_directories(gateway_visa PRIVATE
         ${PostgreSQL_INCLUDE_DIRS}
         ${libpqxx_SOURCE_DIR}/include
         ${spdlog_SOURCE_DIR}/include
+    ${Boost_INCLUDE_DIRS}
 )
 
 # --- Linkagem das Dependências ---
