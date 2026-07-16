@@ -170,12 +170,24 @@ void Session::process_message(const vector<uint8_t> &data) {
 
             auto global_config = DatabaseManager::getInstance().getGlobalConfig();
             string issuer_id = "UNKNOWN";
+            string handler_type = "IssuerLocal";
             if (req.has_field(2) && req.get_field(2).length() >= 6) {
                 string bin = req.get_field(2).substr(0, 6);
                 auto route_info_opt = DatabaseManager::getInstance().lookupRoute(bin);
                 if (route_info_opt.has_value()) {
                     issuer_id = route_info_opt->issuer_id;
+                    auto issuer_config_opt = DatabaseManager::getInstance().lookupIssuerConfig(issuer_id);
+                    if (issuer_config_opt.has_value()) {
+                        handler_type = issuer_config_opt->handler_type;
+                    }
                 }
+            }
+
+            // If the handler is asynchronous (KAFKA/LOCK-FREE), register this session to receive the response later
+            if (handler_type == "KAFKA" ) {
+                string stan = req.get_field(11);
+                LOG_DEBUG("Registering session for async response STAN {}", stan);
+                SessionRegistry::get().register_session(stan, shared_from_this());
             }
 
             if (global_config.global_latency_ms > 0) {
