@@ -34,13 +34,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
-# librdkafka
-FetchContent_Declare(
-        librdkafka
-        GIT_REPOSITORY https://github.com/edenhill/librdkafka.git
-        GIT_TAG v1.8.2
-)
-FetchContent_MakeAvailable(librdkafka)
 
 # libpqxx
 find_package(PostgreSQL REQUIRED)
@@ -70,8 +63,6 @@ add_executable(gateway_visa
         src/issuer/issuer_service.cpp
         src/metrics/metrics_registry.cpp
         src/persistence/transaction_repository.cpp
-        src/kafka/kafka_producer.cpp
-        src/kafka/kafka_consumer.cpp
         src/mapper/iso_to_json.cpp
         src/mapper/json_to_iso.cpp
         src/security/hsm.cpp
@@ -90,7 +81,6 @@ target_include_directories(gateway_visa PRIVATE
         ${nlohmann_json_SOURCE_DIR}/include
         ${PostgreSQL_INCLUDE_DIRS}
         ${libpqxx_SOURCE_DIR}/include
-        ${librdkafka_SOURCE_DIR}/src-cpp
         ${spdlog_SOURCE_DIR}/include
 )
 
@@ -99,9 +89,6 @@ target_link_libraries(gateway_visa PRIVATE
         # Spdlog
         spdlog::spdlog
 
-        # librdkafka
-        rdkafka++
-        ${LIBRDKAFKA_LIBRARIES}
 
         # libpqxx & libpq
         pqxx

@@ -9,8 +9,6 @@
 #include "switch/router.h"
 #include "issuer/issuer_service.h"
 #include "metrics/metrics_registry.h"
-#include "kafka/kafka_producer.h"
-#include "kafka/kafka_consumer.h"
 #include "mapper/iso_to_json.h"
 #include "mapper/json_to_iso.h"
 #include "security/hsm.h"
@@ -48,14 +46,7 @@ int main() {
         DatabaseManager::getInstance().init(app_config.db_connection_string);
         HSM::getInstance().init();
 
-        std::shared_ptr<KafkaProducer> producer;
-        if (!app_config.kafka_brokers.empty()) {
-            try {
-                producer = std::make_shared<KafkaProducer>(app_config.kafka_brokers);
-            } catch (const std::exception &e) {
-                LOG_ERROR("Nao foi possivel conectar ao Kafka. Erro: {}", e.what());
-            }
-        }
+        // Kafka producer disabled — using Lock-Free / direct IssuerService
 
         // --- Registro da Lógica de Roteamento Dinâmico via Banco de Dados ---
         Router::get_instance().setRoutingLogic([](const IsoMessage &msg) -> std::optional<BinRoute> {
@@ -84,54 +75,41 @@ int main() {
         });
 
         // --- Registro dos Handlers ---
-        Router::get_instance().registerIssuerHandler(
-            "KAFKA", [producer, request_topic = app_config.kafka_request_topic](const IsoMessage &msg, const std::string &endpoint_config) -> std::string {
-                if (!producer) return "91";
+        Router::get_instance().registerIssuerHandler("KAFKA", [](const IsoMessage &msg, const std::string &) -> std::string {
+            std::string pan = msg.get_field(2);
+            auto card_opt = DatabaseManager::getInstance().lookupCard(pan);
 
-                std::string pan = msg.get_field(2);
-                auto card_opt = DatabaseManager::getInstance().lookupCard(pan);
+            if (!card_opt) {
+                LOG_WARN("Cartão não encontrado no banco para o handler KAFKA: {}", msg.mask_pan());
+                return "14";
+            }
 
-                if (!card_opt) {
-                    LOG_WARN("Cartão não encontrado no banco para o handler KAFKA: {}", msg.mask_pan());
-                    return "14";
-                }
+            const auto& card = *card_opt;
 
-                const auto& card = *card_opt;
+            if (card.force_response_code.has_value() && !card.force_response_code.value().empty()) {
+                LOG_INFO("[KAFKA HANDLER -> LOCK-FREE] Aplicando RC forçado '{}' para o cartão {}", card.force_response_code.value(), msg.mask_pan());
+                return card.force_response_code.value();
+            }
 
-                if (card.force_response_code.has_value() && !card.force_response_code.value().empty()) {
-                    LOG_INFO("[KAFKA HANDLER] Aplicando RC forçado '{}' para o cartão {}", card.force_response_code.value(), msg.mask_pan());
-                    return card.force_response_code.value();
-                }
+            double amount = 0.0;
+            if (msg.has_field(4)) {
+                std::stringstream ss(msg.get_field(4));
+                ss.imbue(std::locale::classic());
+                ss >> amount;
+                amount = amount / 100.0;
+            }
 
-                double amount = std::stod(msg.get_field(4)) / 100.0;
-                if (!DatabaseManager::getInstance().updateCardBalance(pan, amount)) {
-                    LOG_WARN("Transação negada: Saldo insuficiente ou cartão inativo para o PAN: {}", pan.substr(0,6));
-                    return "51";
-                }
+            if (!DatabaseManager::getInstance().updateCardBalance(pan, amount)) {
+                LOG_WARN("Transação negada: Saldo insuficiente ou cartão inativo para o PAN: {}", pan.substr(0,6));
+                return "51";
+            }
 
-                try {
-                    nlohmann::json original_json = IsoToJsonMapper::mapIsoToJson(msg);
-                    std::string plaintext_payload = original_json.dump();
-                    std::string encrypted_payload_hex = HSM::getInstance().encryptData(plaintext_payload);
+            if (msg.mti == "0400") {
+                return std::string(IssuerService::get_instance().process_reversal(msg));
+            }
 
-                    nlohmann::json kafka_envelope;
-                    kafka_envelope["stan"] = original_json["stan"];
-                    kafka_envelope["encrypted_payload"] = encrypted_payload_hex;
-
-                    std::string final_payload_for_kafka = kafka_envelope.dump();
-                    std::string key = original_json["stan"].get<std::string>();
-
-                    LOG_INFO("Publicando payload ENCRIPTADO no Kafka. Topico: {} | Key: {}", request_topic, key);
-
-                    if (producer->send(request_topic, key, final_payload_for_kafka)) {
-                        return "00";
-                    }
-                } catch (const std::exception &e) {
-                    LOG_ERROR("Erro ao mapear e criptografar mensagem para o Kafka: {}", e.what());
-                }
-
-                return "91";
-            });
+            return std::string(IssuerService::get_instance().process_transaction(msg));
+        });
 
         Router::get_instance().registerIssuerHandler("INTERNAL",
             [](const IsoMessage &msg, const std::string &) -> std::string {
@@ -141,31 +119,7 @@ int main() {
                 return std::string(IssuerService::get_instance().process_transaction(msg));
             });
 
-        // --- Configuração Consumer ---
-        if (!app_config.kafka_brokers.empty()) {
-            std::thread consumer_th([brokers = app_config.kafka_brokers, response_topic = app_config.kafka_response_topic]() {
-                try {
-                    KafkaConsumer consumer(brokers, "visa-gateway-group");
-                    consumer.subscribe({response_topic});
-                    consumer.start_consuming([](const std::string &key, const std::string &payload) {
-                        try {
-                            auto kafka_envelope = nlohmann::json::parse(payload);
-                            std::string encrypted_data = kafka_envelope["encrypted_payload"].get<std::string>();
-                            std::string decrypted_payload_str = HSM::getInstance().decryptData(encrypted_data);
-                            auto original_json = nlohmann::json::parse(decrypted_payload_str);
-                            IsoMessage responseIso = JsonToIsoMapper::mapJsonToIso(original_json);
-                            LOG_INFO("<< [KAFKA CONSUMER] Resposta Mapeada! STAN: {} | Código: {}",
-                                     responseIso.get_field(11), responseIso.get_field(39));
-                        } catch (const std::exception &e) {
-                            LOG_ERROR("Erro ao processar/decriptografar payload do consumidor (STAN: {}): {}", key, e.what());
-                        }
-                    });
-                } catch (const std::exception &e) {
-                    LOG_ERROR("Falha no Consumer: {}", e.what());
-                }
-            });
-            consumer_th.detach();
-        }
+        // Kafka consumer disabled — Lock-Free will handle incoming responses
 
         // Iniciar threads
         std::thread cache_th(cache_refresh_thread, app_config.cache_refresh_interval_sec);
