@@ -131,8 +131,6 @@ ON CONFLICT (code) DO UPDATE SET description_pt = EXCLUDED.description_pt, is_er
 -- Carga: Emissores
 INSERT INTO visa.visanet_issuers (issuer_id, name, handler_type, endpoint_config, is_online) VALUES
 ('ORION_ISS', 'Orion Issuing Local', 'IssuerLocal', '{}', true),
-('KAFKA_GATEWAY', 'Cloud Gateway Kafka', 'KAFKA', '{"topic": "visa-requests"}', true),
-('ISS-001', 'OrionBank Issuer', 'KAFKA', '{}', true),
 ('SIMULATOR_ISS', 'Visa Test Issuer', 'INTERNAL', '{}', true)
 ON CONFLICT (issuer_id) DO NOTHING;
 

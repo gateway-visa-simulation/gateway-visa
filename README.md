@@ -133,11 +133,8 @@ Para evoluir este simulador para um sistema mais robusto e fiel a uma rede de pa
     -   Consultar tabelas `visanet_config`, `visanet_bin_table`, `visanet_simulated_cards` para lógica de negócio.
     -   Logar transações em `visanet_network_log`.
 
-2.  **Integração Apache Kafka:**
-    -   Publicar requisições de autorização em um tópico Kafka (`visa.auth.request`).
-    -   Consumir respostas de outro tópico Kafka (`visa.auth.response`).
-    -   Utilizar o STAN (DE11) como chave de correlação.
-    -   Criptografar o payload JSON no Kafka usando o HSM simulado.
+2.  **Integração (Lock-Free):**
+    -   Publicações/consumo via processamento local lock-free; Kafka foi removido desta versão.
 
 3.  **Controle de Concorrência e Performance:**
     -   Implementar um `ThreadPool` para separar threads de I/O e threads de processamento de lógica de negócio.
