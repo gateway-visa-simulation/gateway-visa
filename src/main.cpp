@@ -145,12 +145,20 @@ int main() {
         // Lock-free consumer thread
         std::thread lockfree_consumer([]() {
             while (true) {
-                void* item = nullptr;
+                LFMessage item;
                 if (global_lockfree_queue && global_lockfree_queue->dequeue(item)) {
-                    // TODO: Replace with actual response type
-                    // auto* resp = static_cast<ResponseType*>(item);
-                    // Decrypt, map, log, etc. as in previous Kafka consumer
-                    // LOG_INFO("Processed response");
+                    try {
+                        auto kafka_envelope = nlohmann::json::parse(item.payload);
+                        std::string encrypted_data = kafka_envelope["encrypted_payload"].get<std::string>();
+                        std::string decrypted_payload_str = HSM::getInstance().decryptData(encrypted_data);
+                        auto original_json = nlohmann::json::parse(decrypted_payload_str);
+                        IsoMessage responseIso = JsonToIsoMapper::mapJsonToIso(original_json);
+                        LOG_INFO("<< [LOCK-FREE CONSUMER] Resposta Mapeada! STAN: {} | Código: {}",
+                                 responseIso.get_field(11), responseIso.get_field(39));
+                        // TODO: apply response (e.g., forward to acquirer connection or update state)
+                    } catch (const std::exception &e) {
+                        LOG_ERROR("Erro ao processar/decriptografar payload do consumidor Lock-Free (STAN: {}): {}", item.key, e.what());
+                    }
                 } else {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
