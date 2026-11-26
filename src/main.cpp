@@ -178,7 +178,7 @@ int main() {
         lockfree_consumer.detach();
 
         // Iniciar threads
-// (Lock-free consumer thread started above)
+        // (Lock-free consumer thread started above)
         std::thread cache_th(cache_refresh_thread, app_config.cache_refresh_interval_sec);
         cache_th.detach();
 

@@ -168,13 +168,7 @@ std::optional<SimulatedCard> DatabaseManager::lookupCard(const std::string &pan)
         std::unique_lock<std::shared_mutex> lock(card_cache_mutex_);
         card_cache_[clean_pan] = *card;
     } else {
-        string masked_pan = clean_pan;
-        if (masked_pan.length() >= 10) {
-            for (size_t i = 6; i < masked_pan.length() - 4; ++i) {
-                masked_pan[i] = '*';
-            }
-        }
-        LOG_WARN("Cartão não encontrado no banco: {}", masked_pan);
+        LOG_DEBUG("Cartão não encontrado no banco de dados.");
     }
     return card;
 }
@@ -264,7 +258,8 @@ bool DatabaseManager::updateCardBalance(const std::string &pan, double amount) {
         pqxx::result r = txn.exec_params(
             "UPDATE visa.visanet_simulated_cards "
             "SET balance = balance - $1, daily_spent = daily_spent + $1 "
-            "WHERE pan = $2 AND balance >= $1 AND is_active = TRUE",
+            "WHERE pan = $2 AND balance >= $1 AND is_active = TRUE "
+            "AND (daily_limit = 0 OR daily_spent + $1 <= daily_limit)",
             amount, clean_pan); // Usa o PAN limpo
         txn.commit();
 
@@ -394,7 +389,7 @@ std::optional<SimulatedCard> DatabaseManager::loadSimulatedCardFromDb(const std:
 
         pqxx::work txn(*conn_);
         pqxx::result r = txn.exec_params(
-            "SELECT pan, issuer_id, is_active, balance, daily_limit, daily_spent, force_response_code, simulation_delay "
+            "SELECT pan, issuer_id, is_active, balance, daily_limit, daily_spent, force_response_code, simulation_delay, pin_block_key "
             "FROM visa.visanet_simulated_cards WHERE pan = $1", pan);
 
         if (!r.empty()) {
@@ -416,6 +411,12 @@ std::optional<SimulatedCard> DatabaseManager::loadSimulatedCardFromDb(const std:
             }
             if (!row["simulation_delay"].is_null()) {
                 card.simulation_delay_ms = row["simulation_delay"].as<int>();
+            }
+            if (!row["pin_block_key"].is_null()) {
+                std::string zpk = row["pin_block_key"].as<std::string>();
+                if (!zpk.empty()) {
+                    card.pin_block_key = zpk;
+                }
             }
 
             return card;

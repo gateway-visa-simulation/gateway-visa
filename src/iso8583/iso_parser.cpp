@@ -1,4 +1,5 @@
 #include "iso_parser.h"
+#include "../common/logger.h"
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
@@ -18,6 +19,13 @@ static string bcd_to_string_local(const vector<uint8_t>& bcd_data) {
     return ss.str();
 }
 
+static uint8_t hex_char_to_val(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return 0; // fallback
+}
+
 static vector<uint8_t> string_to_bcd_local(const string& str) {
     vector<uint8_t> bcd;
     string s = str;
@@ -25,7 +33,7 @@ static vector<uint8_t> string_to_bcd_local(const string& str) {
         s = "0" + s;
     }
     for (size_t i = 0; i < s.length(); i += 2) {
-        uint8_t byte = ((s[i] - '0') << 4) | (s[i+1] - '0');
+        uint8_t byte = (hex_char_to_val(s[i]) << 4) | hex_char_to_val(s[i+1]);
         bcd.push_back(byte);
     }
     return bcd;
@@ -37,7 +45,7 @@ static void initialize_field_defs() {
     field_defs[1] = {1, 16, FieldFormat::FIXED, FieldEncoding::BINARY};
     field_defs[2] = {2, 19, FieldFormat::LLVAR, FieldEncoding::BCD};
     field_defs[3] = {3, 6, FieldFormat::FIXED, FieldEncoding::BCD};
-    field_defs[4] = {4, 12, FieldFormat::FIXED, FieldEncoding::ASCII};
+    field_defs[4] = {4, 12, FieldFormat::FIXED, FieldEncoding::BCD};
     field_defs[7] = {7, 10, FieldFormat::FIXED, FieldEncoding::BCD};
     field_defs[11] = {11, 6, FieldFormat::FIXED, FieldEncoding::BCD};
     field_defs[12] = {12, 6, FieldFormat::FIXED, FieldEncoding::BCD};
@@ -129,7 +137,9 @@ IsoMessage IsoParser::parse(const vector<uint8_t>& data) {
 
             int bytes_to_read = (def.encoding == FieldEncoding::BCD) ? (len + 1) / 2 : len;
             if (data.size() < offset + bytes_to_read) {
-                throw runtime_error("Buffer overflow while parsing field " + to_string(field_id));
+                LOG_WARN("Insufficient data for field {}: expected {} bytes, but only {} bytes available. Skipping field.", 
+                         field_id, bytes_to_read, data.size() - offset);
+                continue;
             }
 
             vector<uint8_t> field_data(data.begin() + offset, data.begin() + offset + bytes_to_read);
@@ -139,7 +149,9 @@ IsoMessage IsoParser::parse(const vector<uint8_t>& data) {
                 msg.set_field(field_id, bcd_str.substr(0, len));
             } else {
                 string value(field_data.begin(), field_data.end());
-                if (def.format == FieldFormat::FIXED) {
+                // Trim apenas em campos texto: campos BINARY (DE-52 PIN block, DE-64 MAC)
+                // podem terminar legitimamente em 0x20/0x09/etc e não podem perder bytes.
+                if (def.format == FieldFormat::FIXED && def.encoding != FieldEncoding::BINARY) {
                     size_t last_char = value.find_last_not_of(" \t\n\r\f\v\0");
                      if (string::npos != last_char) {
                         value.erase(last_char + 1);

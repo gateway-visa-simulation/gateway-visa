@@ -50,8 +50,12 @@ CREATE TABLE IF NOT EXISTS visa.visanet_simulated_cards (
     is_active BOOLEAN DEFAULT true,
     product_type VARCHAR(20),
     force_response_code VARCHAR(3),
-    simulation_delay INTEGER DEFAULT 0
+    simulation_delay INTEGER DEFAULT 0,
+    pin_block_key VARCHAR(48) -- ZPK em hex (TDES 2-key = 32, 3-key = 48). NULL = chave de teste.
 );
+
+-- Migração para bancos já existentes (CREATE TABLE IF NOT EXISTS não adiciona colunas novas)
+ALTER TABLE visa.visanet_simulated_cards ADD COLUMN IF NOT EXISTS pin_block_key VARCHAR(48);
 
 -- 5. Tabela de Logs da Rede
 -- O coração do monitoramento. Cada transação processada pelo motor C++ deve gerar um registro aqui.

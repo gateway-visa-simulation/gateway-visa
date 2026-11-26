@@ -53,7 +53,14 @@ string IssuerService::process_transaction(const IsoMessage& req) {
         // CORREÇÃO LOCALE-SAFE: Usa um stringstream com o locale "classic" para garantir que '.' é o separador.
         std::stringstream ss(req.get_field(4));
         ss.imbue(std::locale::classic());
-        ss >> amount;
+        double amount_in_cents;
+        ss >> amount_in_cents;
+        amount = amount_in_cents / 100.0;
+    }
+
+    if (card.daily_limit > 0 && (card.daily_spent + amount > card.daily_limit)) {
+        LOG_WARN("Transação negada: Limite diário excedido para o PAN: {}", req.mask_pan());
+        return "61"; // Exceeds withdrawal limit
     }
 
     if (!DatabaseManager::getInstance().updateCardBalance(pan, amount)) {
@@ -80,7 +87,9 @@ string IssuerService::process_reversal(const IsoMessage& req) {
         // CORREÇÃO LOCALE-SAFE: Usa um stringstream com o locale "classic"
         std::stringstream ss(req.get_field(4));
         ss.imbue(std::locale::classic());
-        ss >> amount;
+        double amount_in_cents;
+        ss >> amount_in_cents;
+        amount = amount_in_cents / 100.0;
     }
 
     // Realiza o estorno do saldo

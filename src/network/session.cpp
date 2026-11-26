@@ -134,15 +134,26 @@ void Session::process_message(const vector<uint8_t> &data) {
                 }
             }
 
-            // REVERTIDO: Validação de PIN é executada sempre que o campo 52 está presente.
+            // Validação de PIN é executada sempre que o campo 52 está presente.
             if (req.has_field(52) && req.has_field(2)) {
-                string pin_block_str = req.get_field(52);
-                vector<uint8_t> pin_block_bytes(pin_block_str.begin(), pin_block_str.end());
+                // DE-52 é BINARY: o parser armazena os 8 bytes crus na string (não é hex).
+                string pin_block_raw = req.get_field(52);
+                vector<uint8_t> pin_block_bytes(pin_block_raw.begin(), pin_block_raw.end());
+
                 string pan = req.get_field(2);
-                string zpk_hex = "0123456789ABCDEFFEDCBA9876543210";
+
+                // Buscar ZPK do cartão simulado; fallback para chave de teste se não configurada.
+                string zpk_hex;
+                auto card_info_opt = DatabaseManager::getInstance().lookupCard(pan);
+                if (card_info_opt.has_value() && card_info_opt->pin_block_key.has_value()) {
+                    zpk_hex = card_info_opt->pin_block_key.value();
+                    LOG_DEBUG("ZPK carregada do cartão simulado para PAN {}", req.mask_pan());
+                } else {
+                    zpk_hex = "0123456789ABCDEFFEDCBA9876543210";
+                    LOG_WARN("ZPK não configurada para o cartão. Usando chave de teste para PAN {}", req.mask_pan());
+                }
 
                 LOG_INFO("Iniciando validação de PIN com SoftHSM local para PAN {}", req.mask_pan());
-                LOG_DEBUG("Using ZPK for decryption: {}", zpk_hex);
 
                 auto decrypted_pin_opt = SoftHsm::get_instance().decrypt_pin_block_iso0(pin_block_bytes, pan, zpk_hex);
 

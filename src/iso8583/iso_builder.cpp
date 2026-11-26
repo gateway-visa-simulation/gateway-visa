@@ -25,10 +25,15 @@ IsoMessage IsoBuilder::build_response(const IsoMessage& request, const string& r
     // Define ou sobrescreve o código de resposta
     response.set_field(39, response_code);
 
-    // Garante que campos essenciais para a correlação estejam presentes
+    // Garante que campos essenciais para a correlação (como o STAN) estejam presentes e bem formatados
     if (request.has_field(11)) {
-        response.set_field(11, request.get_field(11));
+        string stan = request.get_field(11);
+        if (stan.length() < 6) {
+            stan.insert(0, 6 - stan.length(), '0'); // Garante que o STAN sempre tenha 6 dígitos (ISO 8583)
+        }
+        response.set_field(11, stan);
     }
+
     if (request.has_field(41)) {
         response.set_field(41, request.get_field(41));
     }
